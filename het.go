@@ -1,29 +1,39 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/ssddanbrown/het/engine"
+	"os"
+	"path/filepath"
 )
-
-var testInput string = `
-
-<div>
-	<t:hello>
-	this is some content
-		<t:test>
-			more content
-		</t:test>
-	</t:hello>
-a
-</div>
-
-`
 
 func main() {
 
-	o, err := engine.ParseString(testInput)
+	flag.Parse()
+
+	if len(flag.Args()) < 1 {
+		fmt.Println("File to parse required")
+		return
+	}
+
+	readFile := flag.Args()[0]
+	readFilePath, err := filepath.Abs(filepath.Join("./", readFile))
+	check(err)
+
+	givenFile, err := os.Open(readFilePath)
+	defer givenFile.Close()
+	check(err)
+
+	o, err := engine.Parse(givenFile, readFilePath)
 	if err != nil {
 		fmt.Println("error: " + err.Error())
 	}
 	fmt.Println(o)
+}
+
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
