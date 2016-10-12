@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/ssddanbrown/het/engine"
+	"github.com/ssddanbrown/haste/engine"
 	"os"
 	"path/filepath"
 )
