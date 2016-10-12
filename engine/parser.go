@@ -43,7 +43,7 @@ func (t *templateTag) parseTemplate() (string, error) {
 func (t *tracker) parseVariableTags(s string) string {
 	inTag := false
 	tagStart := 0
-	tagEnd := 0
+	tagEnd := -1
 	sLen := len(s)
 	newString := ""
 	sTag := "{"[0]
