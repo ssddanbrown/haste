@@ -16,8 +16,8 @@ type tracker struct {
 	contextFile       string
 	contextFolderPath string
 	vars              map[string]string
-
-	tokenizer *html.Tokenizer
+	templateContent   map[string]string
+	tokenizer         *html.Tokenizer
 }
 
 type templateTag struct {
@@ -39,6 +39,9 @@ func newTracker(r io.Reader, contextFile string, parent *tracker) (*tracker, err
 		for k, v := range parent.vars {
 			t.vars[k] = v
 		}
+		t.templateContent = parent.templateContent
+	} else {
+		t.templateContent = make(map[string]string)
 	}
 
 	// Preparse template and create HTML tokenizer

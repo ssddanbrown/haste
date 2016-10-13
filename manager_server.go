@@ -84,6 +84,10 @@ func (m *managerServer) handleFileChange(changedFile string) {
 		return
 	}
 
+	if strings.Contains(changedFile, ".gen.html") {
+		return
+	}
+
 	template := false
 	for i := range m.templatingFiles {
 		if m.templatingFiles[i] == changedFile {
@@ -95,6 +99,9 @@ func (m *managerServer) handleFileChange(changedFile string) {
 		file, err := os.Open(changedFile)
 		defer file.Close()
 		check(err)
+
+		fmt.Println("Parsing template")
+
 		newContent, err := engine.Parse(file, changedFile)
 		if err != nil {
 			devlog(err.Error())
@@ -224,6 +231,8 @@ func (manager *managerServer) getLivereloadWsHandler() func(ws *websocket.Conn) 
 			err := websocket.JSON.Receive(ws, &wsData)
 			if err != nil && err != io.EOF {
 				check(err)
+				return
+			} else if err == io.EOF {
 				return
 			}
 

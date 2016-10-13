@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,19 +18,34 @@ func (t *templateTag) nameToPath() string {
 func (t *templateTag) parseTemplate() (string, error) {
 	tempFilePath := filepath.Join(t.tracker.contextFolderPath, t.nameToPath())
 
-	// If template file does not exist, throw an error
-	if _, err := os.Stat(tempFilePath); os.IsNotExist(err) {
-		return "", errors.New(fmt.Sprintf("Template tag with name \"%s\" does not have a template file at \"%s\"", t.name, tempFilePath))
-	}
+	var r io.Reader
 
-	tempFile, err := os.Open(tempFilePath)
-	defer tempFile.Close()
-	if err != nil {
-		return "", err
+	if val, ok := t.tracker.templateContent[tempFilePath]; ok {
+		r = strings.NewReader(val)
+		fmt.Println("From template")
+	} else {
+		// If template file does not exist, throw an error
+		if _, err := os.Stat(tempFilePath); os.IsNotExist(err) {
+			return "", errors.New(fmt.Sprintf("Template tag with name \"%s\" does not have a template file at \"%s\"", t.name, tempFilePath))
+		}
+
+		tempFile, err := os.Open(tempFilePath)
+		defer tempFile.Close()
+		if err != nil {
+			return "", err
+		}
+		content, err := ioutil.ReadAll(tempFile)
+		if err != nil {
+			return "", err
+		}
+
+		contentString := string(content)
+		t.tracker.templateContent[tempFilePath] = contentString
+		r = strings.NewReader(contentString)
 	}
 
 	// Parse in the child content
-	templateContent, err := parseChild(tempFile, tempFilePath, t.tracker)
+	templateContent, err := parseChild(r, tempFilePath, t.tracker)
 	if err != nil {
 		return "", err
 	}
