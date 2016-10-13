@@ -32,12 +32,19 @@ func startFileServer(rootPath string) (*fileServer, error) {
 	}
 
 	go func() {
-		http.Serve(listener, http.FileServer(http.Dir(rootPath)))
+		http.Serve(listener, noCache(http.FileServer(http.Dir(rootPath))))
 	}()
 
 	idCounter++
 
 	return &fileServer{ID: idCounter, Port: port, RootPath: serverRootPath, server: listener}, nil
+}
+
+func noCache(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Cache-Control", "no-cache")
+		h.ServeHTTP(w, r)
+	})
 }
 
 func (fs *fileServer) Url() string {

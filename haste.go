@@ -76,7 +76,7 @@ func check(err error) {
 }
 
 func devlog(s string) {
-	fmt.Println(s)
+	// fmt.Println(s)
 }
 
 func stringInSlice(str string, list []string) bool {

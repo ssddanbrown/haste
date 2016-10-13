@@ -8,6 +8,7 @@ watch:
 	rice embed-go
 	go install github.com/ssddanbrown/haste && haste -w testfile.html
 build:
+	rm -rf builds
 	mkdir builds
 	rice embed-go
 	env GOOS=windows GOARCH=386 go build -o builds/haste-windows-386.exe

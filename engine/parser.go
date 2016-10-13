@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -22,7 +21,6 @@ func (t *templateTag) parseTemplate() (string, error) {
 
 	if val, ok := t.tracker.templateContent[tempFilePath]; ok {
 		r = strings.NewReader(val)
-		fmt.Println("From template")
 	} else {
 		// If template file does not exist, throw an error
 		if _, err := os.Stat(tempFilePath); os.IsNotExist(err) {
@@ -60,67 +58,83 @@ func (t *tracker) parseVariableTags(s string) string {
 	inTag := false
 	tagStart := 0
 	tagEnd := -1
-	sLen := len(s)
-	newString := ""
-	sTag := "{"[0]
-	cTag := "}"[0]
-	for i := range s {
-		if sLen > i+2 && s[i] == sTag && s[i+1] == sTag && s[i+2] == sTag && (i == 0 || s[i-1] != "@"[0]) {
+
+	newContent := make([]byte, 0)
+	symbols := []byte("{}@")
+	b := []byte(s)
+	bLen := len(b)
+	for i := range b {
+		if b[i] == symbols[0] && bLen > i+2 && b[i+1] == symbols[0] && b[i+2] == symbols[0] && (i == 0 || b[i-1] != symbols[2]) {
 			// Start tag
 			if inTag {
-				newString += s[tagStart:i] // Update new contents if that tag start is reset
+				newContent = append(newContent, b[tagStart:i]...) // Update new contents if that tag start is reset
 			}
 			tagStart = i + 1
 			inTag = true
-		} else if inTag && sLen > i+2 && s[i] == cTag && s[i+1] == cTag && s[i+2] == cTag {
+		} else if inTag && b[i] == symbols[1] && bLen > i+2 && b[i+1] == symbols[1] && b[i+2] == symbols[1] {
 			// End tag
 			inTag = false
-			tagKey := s[tagStart+2 : i]
-			newString += t.vars[tagKey]
+			tagKey := string(b[tagStart+2 : i])
+			newContent = append(newContent, t.vars[tagKey]...)
 			tagEnd = i + 2
 		} else if inTag && i-tagStart > 100 {
 			// Tag name tracking sutoff
 			inTag = false
-			newString += s[tagStart:i]
+			newContent = append(newContent, b[tagStart:i]...)
 		} else if !inTag && tagEnd < i {
 			// No tag
-			newString += string(s[i])
+			newContent = append(newContent, b[i])
 		}
 	}
 	// Add any remaning content if a new tag was being tracked
 	if inTag {
-		newString += s[tagStart:]
+		newContent = append(newContent, b[tagStart:]...)
 	}
-	return newString
+	return string(newContent)
 }
 
 // Perform all pre-parse actions, These modify the HTML before it
 // reaches the tozeniker
 func (t *tracker) preParseTemplate(r io.Reader) (string, error) {
-
-	scanner := bufio.NewScanner(r)
+	text, err := ioutil.ReadAll(r)
+	if err != nil {
+		return "", err
+	}
 	fileContents := ""
 
 	// Search, Store & remove any variables
-	reading := true
 	readingVars := true
-	line := 0
-	for scanner.Scan() && reading {
-		text := scanner.Text()
-		if readingVars && text[0] == "@"[0] {
-			if key, value := parseVar(text); key != "" {
-				t.vars[key] = value
+	readingLineVarName := false
+	readingLineVarValue := false
+	cName := ""
+	cVal := ""
+
+	for i := range text {
+		if readingVars {
+			// If start of var
+			if text[i] == "@"[0] && (i == 0 || text[i-1] == "\n"[0]) {
+				readingLineVarName = true
+				readingLineVarValue = false
+				cName = ""
+			} else if readingLineVarName && text[i] != "\n"[0] && text[i] != "="[0] {
+				cName += string(text[i])
+			} else if readingLineVarName && text[i] == "="[0] {
+				readingLineVarName = false
+				readingLineVarValue = true
+				cVal = ""
+			} else if readingLineVarValue && text[i] != "\n"[0] {
+				cVal += string(text[i])
+			} else if readingLineVarValue {
+				t.vars[cName] = cVal
+				readingLineVarValue = false
+			} else if i == 0 || text[i-1] == "\n"[0] {
+				readingVars = false
 			}
 		} else {
-			readingVars = false
-			if line != 0 {
-				fileContents += "\n"
-			}
-			fileContents += text
-			line++
+			fileContents = string(text[i-1:])
+			break
 		}
 	}
-
 	return fileContents, nil
 }
 

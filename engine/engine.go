@@ -91,7 +91,7 @@ func (t *tracker) depth() int {
 }
 
 // feed in another token from the tag tokenizer.
-func (t *tracker) feed() error {
+func (t *tracker) feed() (string, error) {
 	raw := string(t.tokenizer.Raw())
 	nameBytes, _ := t.tokenizer.TagName()
 	token := t.tokenizer.Token()
@@ -105,7 +105,7 @@ func (t *tracker) feed() error {
 	} else if isTempTag && token.Type == html.EndTagToken {
 		err := t.closeTemplateTag()
 		if err != nil {
-			return err
+			return name, err
 		}
 	} else if t.depth() > 0 {
 		// If not a template tag and we are in a template tag
@@ -118,19 +118,22 @@ func (t *tracker) feed() error {
 	if !isTempTag && t.depth() == 0 {
 		t.output += raw
 	}
-	return nil
+	return name, nil
 }
 
 func (t *tracker) parse() (string, error) {
+	count := 0
 	for {
 		tt := t.tokenizer.Next()
 		if tt == html.ErrorToken {
 			return t.parseVariableTags(t.output), nil
 		}
-		err := t.feed()
+		_, err := t.feed()
+
 		if err != nil {
 			return "", err
 		}
+		count++
 	}
 }
 
@@ -140,8 +143,8 @@ func Parse(r io.Reader, fileLocation string) (string, error) {
 		return "", err
 	}
 
-	return tracker.parse()
-
+	s, err := tracker.parse()
+	return s, err
 }
 
 func parseChild(r io.Reader, fileLocation string, tracker *tracker) (string, error) {

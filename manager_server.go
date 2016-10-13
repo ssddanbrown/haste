@@ -7,6 +7,7 @@ import (
 	"github.com/ssddanbrown/haste/engine"
 	"golang.org/x/net/websocket"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -74,7 +75,7 @@ func (m *managerServer) handleFileChange(changedFile string) {
 
 	// Prevent duplicate changes
 	currentTime := time.Now().UnixNano()
-	if (currentTime-m.lastFileChange)/1000000 < 10 {
+	if (currentTime-m.lastFileChange)/1000000 < 100 {
 		return
 	}
 
@@ -96,29 +97,29 @@ func (m *managerServer) handleFileChange(changedFile string) {
 	}
 
 	if template {
-		file, err := os.Open(changedFile)
-		defer file.Close()
-		check(err)
+		time.AfterFunc(100*time.Millisecond, func() {
+			in, err := ioutil.ReadFile(changedFile)
+			check(err)
 
-		fmt.Println("Parsing template")
+			r := strings.NewReader(string(in))
 
-		newContent, err := engine.Parse(file, changedFile)
-		if err != nil {
-			devlog(err.Error())
-			return
-		}
+			newContent, err := engine.Parse(r, changedFile)
+			if err != nil {
+				devlog(err.Error())
+				return
+			}
 
-		newFileName := getGenFileName(changedFile)
-		newFileLocation := filepath.Join(filepath.Dir(changedFile), "./"+newFileName)
-		newFile, err := os.Create(newFileLocation)
-		defer newFile.Close()
-		check(err)
+			newFileName := getGenFileName(changedFile)
+			newFileLocation := filepath.Join(filepath.Dir(changedFile), "./"+newFileName)
+			newFile, err := os.Create(newFileLocation)
+			defer newFile.Close()
+			check(err)
 
-		newFile.WriteString(newContent)
-		newFile.Sync()
-		devlog(fmt.Sprintf("Written compiled file to \"%s\"", newFileLocation))
+			newFile.WriteString(newContent)
+			newFile.Sync()
+			m.changedFiles <- newFileLocation
+		})
 
-		m.changedFiles <- newFileLocation
 	} else {
 		m.changedFiles <- changedFile
 	}
