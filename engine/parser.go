@@ -78,7 +78,7 @@ func (t *tracker) parseVariableTags(s string) string {
 			newContent = append(newContent, t.vars[tagKey]...)
 			tagEnd = i + 2
 		} else if inTag && i-tagStart > 100 {
-			// Tag name tracking sutoff
+			// Tag name tracking cutoff
 			inTag = false
 			newContent = append(newContent, b[tagStart:i]...)
 		} else if !inTag && tagEnd < i {
@@ -108,26 +108,27 @@ func (t *tracker) preParseTemplate(r io.Reader) (string, error) {
 	readingLineVarValue := false
 	cName := ""
 	cVal := ""
+	symbols := []byte("@\n=\r")
 
 	for i := range text {
 		if readingVars {
 			// If start of var
-			if text[i] == "@"[0] && (i == 0 || text[i-1] == "\n"[0]) {
+			if text[i] == symbols[0] && (i == 0 || text[i-1] == symbols[1]) {
 				readingLineVarName = true
 				readingLineVarValue = false
 				cName = ""
-			} else if readingLineVarName && text[i] != "\n"[0] && text[i] != "="[0] {
+			} else if readingLineVarName && text[i] != symbols[1] && text[i] != symbols[2] {
 				cName += string(text[i])
-			} else if readingLineVarName && text[i] == "="[0] {
+			} else if readingLineVarName && text[i] == symbols[2] {
 				readingLineVarName = false
 				readingLineVarValue = true
 				cVal = ""
-			} else if readingLineVarValue && text[i] != "\n"[0] {
+			} else if readingLineVarValue && text[i] != symbols[1] && text[i] != symbols[3] {
 				cVal += string(text[i])
 			} else if readingLineVarValue {
 				t.vars[cName] = cVal
 				readingLineVarValue = false
-			} else if i == 0 || text[i-1] == "\n"[0] {
+			} else if i == 0 || text[i-1] == symbols[1] {
 				readingVars = false
 			}
 		} else {
