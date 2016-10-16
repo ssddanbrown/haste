@@ -16,8 +16,11 @@ type tracker struct {
 	contextFile       string
 	contextFolderPath string
 	vars              map[string]string
-	templateContent   map[string]string
-	tokenizer         *html.Tokenizer
+
+	templateContent     map[string]string
+	parsedTemplateCache map[string]string
+
+	tokenizer *html.Tokenizer
 }
 
 type templateTag struct {
@@ -33,6 +36,7 @@ func newTracker(r io.Reader, contextFile string, parent *tracker) (*tracker, err
 		contextFolderPath: filepath.Dir(contextFile),
 	}
 
+	t.parsedTemplateCache = make(map[string]string)
 	// Copy over any parent vars
 	t.vars = make(map[string]string)
 	if parent != nil {
@@ -61,7 +65,7 @@ func (t *tracker) addTemplateTag(tagName string) *templateTag {
 // Closes the last template tag off and parses the content
 // into the next latest template tag or, if not mor tags exist,
 // adds the tag content to the output
-func (t *tracker) closeTemplateTag() error {
+func (t *tracker) closeTemplateTag() (err error) {
 	var closingTag *templateTag
 
 	if t.depth() > 1 {
@@ -70,9 +74,16 @@ func (t *tracker) closeTemplateTag() error {
 		closingTag = t.tags[0]
 	}
 
-	content, err := closingTag.parseTemplate()
-	if err != nil {
-		return err
+	key := t.contextFile + ":" + closingTag.name + ":" + closingTag.content
+	var content string
+	if val, ok := t.parsedTemplateCache[key]; ok {
+		content = val
+	} else {
+		content, err = closingTag.parseTemplate()
+		if err != nil {
+			return
+		}
+		t.parsedTemplateCache[key] = content
 	}
 
 	if t.depth() > 1 {
@@ -82,7 +93,7 @@ func (t *tracker) closeTemplateTag() error {
 	}
 	// Drop the last tag in the tracker
 	t.tags = t.tags[:t.depth()-1]
-	return nil
+	return
 }
 
 // Get the current nesting depth of template tags
