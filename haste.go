@@ -4,17 +4,25 @@ import (
 	"flag"
 	"fmt"
 	"github.com/ssddanbrown/haste/engine"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 )
 
+var isVerbose bool
+
 func main() {
 
-	watch := flag.Bool("w", false, "Watch html file and auto-compile")
+	watch := flag.Bool("w", false, "Watch HTML file and auto-compile")
+	port := flag.Int("p", 8081, "Provide a port to listen on")
+	liveReload := flag.Bool("l", false, "Enable livereload (When watching only)")
+	verbose := flag.Bool("v", false, "Enable verbose ouput")
+	watchDepth := flag.Int("d", 2, "Child folder watch depth (When watching only)")
 
 	flag.Parse()
+	isVerbose = *verbose
 
 	if len(flag.Args()) < 1 {
 		fmt.Println("File to parse required")
@@ -36,21 +44,26 @@ func main() {
 		return
 	}
 
-	port := 35729
-	portFree := checkPortFree(port)
+	manager := &managerServer{
+		watchedFile: readFilePath,
+		Port:        *port,
+		LiveReload:  *liveReload,
+		WatchDepth:  *watchDepth,
+	}
+
+	portFree := checkPortFree(manager.Port)
 
 	if !portFree {
-		fmt.Printf("Listen port %d not available, Are you already running haste?\n", port)
+		fmt.Printf("Listen port %d not available, Are you already running haste?\n", manager.Port)
 		return
 	}
 
-	manager := &managerServer{}
-	fServer, err := manager.addFileServer(readFilePath)
-	check(err)
-	fmt.Sprintf("Server started at http://localhost:%d", port)
-	fmt.Sprintf("FileServer started at http://localhost:%d", fServer.Port)
-	openWebPage(fmt.Sprintf("http://localhost:%d/%s", fServer.Port, getGenFileName(readFilePath)))
-	err = manager.listen(port)
+	manager.addWatchedFolder(readFilePath)
+
+	fmt.Sprintf("Server started at http://localhost:%d", manager.Port)
+	openWebPage(fmt.Sprintf("http://localhost:%d/", manager.Port))
+
+	err = manager.listen()
 	check(err)
 }
 
@@ -76,7 +89,9 @@ func check(err error) {
 }
 
 func devlog(s string) {
-	// fmt.Println(s)
+	if isVerbose {
+		fmt.Println(s)
+	}
 }
 
 func stringInSlice(str string, list []string) bool {
@@ -102,4 +117,15 @@ func getGenFileName(originalName string) string {
 	fileExt := filepath.Ext(originalName)
 	fileBaseName := fileName[:len(fileName)-len(fileExt)]
 	return fileBaseName + ".gen" + fileExt
+}
+
+func checkPortFree(port int) bool {
+
+	conn, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
+	if err != nil {
+		return false
+	}
+
+	conn.Close()
+	return true
 }

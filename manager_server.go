@@ -8,47 +8,37 @@ import (
 	"golang.org/x/net/websocket"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
 )
 
 type managerServer struct {
-	FileServers     []*fileServer
-	WatchedFolders  []string
-	fileWatcher     *fsnotify.Watcher
-	changedFiles    chan string
-	sockets         []*websocket.Conn
-	lastFileChange  int64
-	Port            int
-	NetworkIp       string
-	templatingFiles []string
+	WatchedFolders []string
+	fileWatcher    *fsnotify.Watcher
+	changedFiles   chan string
+	sockets        []*websocket.Conn
+	lastFileChange int64
+	Port           int
+	watchedFile    string
+	LiveReload     bool
+	WatchDepth     int
 }
 
-func (m *managerServer) addFileServer(htmlFilePath string) (*fileServer, error) {
+func (m *managerServer) addWatchedFolder(htmlFilePath string) {
 	rootPath := filepath.Dir(htmlFilePath)
-	m.templatingFiles = append(m.templatingFiles, htmlFilePath)
-
-	fServer, err := startFileServer(rootPath)
-	if err != nil {
-		return nil, err
-	}
-	m.FileServers = append(m.FileServers, fServer)
-
-	m.watchFolder(fServer.RootPath)
+	err := m.watchFoldersToDepth(rootPath, m.WatchDepth)
+	check(err)
 	go m.handleFileChange(htmlFilePath)
-	return fServer, nil
 }
 
-func (m *managerServer) listen(port int) error {
+func (m *managerServer) listen() error {
 	m.startFileWatcher()
-	m.Port = port
-	m.NetworkIp = getLocalIp()
 	handler := m.getManagerRouting()
-	http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", port), handler)
+	http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", m.Port), handler)
 	return nil
 }
 
@@ -81,7 +71,6 @@ func (m *managerServer) handleFileChange(changedFile string) {
 
 	// Ignore git directories
 	if strings.Contains(changedFile, ".git") {
-		// devlog("GITCHANGE")
 		return
 	}
 
@@ -89,28 +78,30 @@ func (m *managerServer) handleFileChange(changedFile string) {
 		return
 	}
 
-	template := false
-	for i := range m.templatingFiles {
-		if m.templatingFiles[i] == changedFile {
-			template = true
+	// Check if a relevant extension
+	watchedExtensions := []string{".html", ".css", ".js"}
+	reload := false
+	for i := range watchedExtensions {
+		if filepath.Ext(changedFile) == watchedExtensions[i] {
+			reload = true
 		}
 	}
 
-	if template {
+	if reload {
 		time.AfterFunc(100*time.Millisecond, func() {
-			in, err := ioutil.ReadFile(changedFile)
+			in, err := ioutil.ReadFile(m.watchedFile)
 			check(err)
 
 			r := strings.NewReader(string(in))
 
-			newContent, err := engine.Parse(r, changedFile)
+			newContent, err := engine.Parse(r, m.watchedFile)
 			if err != nil {
 				devlog(err.Error())
 				return
 			}
 
-			newFileName := getGenFileName(changedFile)
-			newFileLocation := filepath.Join(filepath.Dir(changedFile), "./"+newFileName)
+			newFileName := getGenFileName(m.watchedFile)
+			newFileLocation := filepath.Join(filepath.Dir(m.watchedFile), "./"+newFileName)
 			newFile, err := os.Create(newFileLocation)
 			defer newFile.Close()
 			check(err)
@@ -173,6 +164,29 @@ func (m *managerServer) startFileWatcher() error {
 	return nil
 }
 
+func (m *managerServer) watchFoldersToDepth(folderPath string, depth int) error {
+
+	ignoreFolders := []string{"node_modules", ".git"}
+
+	m.watchFolder(folderPath)
+	if depth == 0 {
+		return nil
+	}
+
+	folderItems, err := ioutil.ReadDir(folderPath)
+	if err != nil {
+		return err
+	}
+
+	for _, f := range folderItems {
+		if f.IsDir() && !stringInSlice(f.Name(), ignoreFolders) {
+			newFPath := filepath.Join(folderPath, f.Name())
+			m.watchFoldersToDepth(newFPath, depth-1)
+		}
+	}
+
+	return nil
+}
 func (m *managerServer) watchFolder(folderPath string) error {
 	if !stringInSlice(folderPath, m.WatchedFolders) {
 		m.WatchedFolders = append(m.WatchedFolders, folderPath)
@@ -192,11 +206,35 @@ func (manager *managerServer) getManagerRouting() *http.ServeMux {
 
 	handler := http.NewServeMux()
 
+	// Get our generated HTML file
+	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		file, err := os.Open(getGenFileName(manager.watchedFile))
+		check(err)
+		w.Header().Add("Cache-Control", "no-cache")
+		w.Header().Add("Content-Type", "text/html")
+		io.Copy(w, file)
+		if manager.LiveReload {
+			fmt.Fprintln(w, "\n<script src=\"/livereload.js\"></script>")
+		}
+	})
+
+	if !manager.LiveReload {
+		return handler
+	}
+
 	// Load compiled in static content
 	fileBox := rice.MustFindBox("res")
 
 	// Get LiveReload Script
-	handler.Handle("/livereload.js", http.FileServer(fileBox.HTTPBox()))
+	handler.HandleFunc("/livereload.js", func(w http.ResponseWriter, r *http.Request) {
+		http.FileServer(fileBox.HTTPBox())
+		scriptString := fileBox.MustString("livereload.js")
+		templS, err := template.New("livereload").Parse(scriptString)
+		if err != nil {
+			check(err)
+		}
+		templS.Execute(w, manager.Port)
+	})
 
 	// Websocket handling
 	wsHandler := manager.getLivereloadWsHandler()
@@ -257,23 +295,4 @@ func (manager *managerServer) getLivereloadWsHandler() func(ws *websocket.Conn) 
 
 	}
 
-}
-
-func getLocalIp() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-	for _, address := range addrs {
-		// check the address type and if it is not a loopback the display it
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				ipString := ipnet.IP.String()
-				if strings.Index(ipString, "192.168") == 0 || strings.Index(ipString, "10.") == 0 {
-					return ipString
-				}
-			}
-		}
-	}
-	return ""
 }
