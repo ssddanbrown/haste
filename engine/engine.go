@@ -5,55 +5,62 @@ import (
 	"golang.org/x/net/html"
 	"io"
 	"path/filepath"
-	"strings"
 )
 
 var _ = fmt.Println
 
 type tracker struct {
-	output            string
+	reader            io.Reader
+	writer            io.Writer
 	tags              []*templateTag
 	contextFile       string
 	contextFolderPath string
 	vars              map[string]string
 	templateContent   map[string]string
 	tokenizer         *html.Tokenizer
+
+	errChan chan error
 }
 
 type templateTag struct {
+	reader  io.Reader
+	writer  io.Writer
 	name    string
-	content string
 	tracker *tracker
 }
 
-func newTracker(r io.Reader, contextFile string, parent *tracker) (*tracker, error) {
+func newTracker(r io.Reader, contextFile string, parent *tracker) *tracker {
 	t := &tracker{
 		tags:              make([]*templateTag, 0),
 		contextFile:       contextFile,
 		contextFolderPath: filepath.Dir(contextFile),
 	}
 
-	// Copy over any parent vars
+	// Copy over any parent vars and copy the reference to out template cache
 	t.vars = make(map[string]string)
 	if parent != nil {
 		for k, v := range parent.vars {
 			t.vars[k] = v
 		}
 		t.templateContent = parent.templateContent
+		t.errChan = parent.errChan
 	} else {
 		t.templateContent = make(map[string]string)
 	}
 
+	t.reader, t.writer = io.Pipe()
+
 	// Preparse template and create HTML tokenizer
-	content, err := t.preParseTemplate(r)
-	t.tokenizer = html.NewTokenizer(strings.NewReader(content))
-	return t, err
+	contentReader := t.preParseTemplate(r)
+	t.tokenizer = html.NewTokenizer(contentReader)
+	return t
 }
 
 // Adds a new template tag to the stack
 func (t *tracker) addTemplateTag(tagName string) *templateTag {
 	templateName := tagName[2:]
 	tag := &templateTag{name: templateName, tracker: t}
+	t.reader, t.writer = io.Pipe()
 	t.tags = append(t.tags, tag)
 	return tag
 }
@@ -76,13 +83,13 @@ func (t *tracker) closeTemplateTag() error {
 	}
 
 	if t.depth() > 1 {
-		t.tags[t.depth()-2].content += content
+		_, err = io.Copy(t.tags[t.depth()-2].writer, content)
 	} else {
-		t.output += content
+		_, err = io.Copy(t.writer, content)
 	}
 	// Drop the last tag in the tracker
 	t.tags = t.tags[:t.depth()-1]
-	return nil
+	return err
 }
 
 // Get the current nesting depth of template tags
@@ -92,7 +99,7 @@ func (t *tracker) depth() int {
 
 // feed in another token from the tag tokenizer.
 func (t *tracker) feed() (string, error) {
-	raw := string(t.tokenizer.Raw())
+	raw := t.tokenizer.Raw()
 	nameBytes, _ := t.tokenizer.TagName()
 	token := t.tokenizer.Token()
 	name := string(nameBytes)
@@ -110,48 +117,42 @@ func (t *tracker) feed() (string, error) {
 	} else if t.depth() > 0 {
 		// If not a template tag and we are in a template tag
 		// add the content to the latest tag store
-		t.tags[t.depth()-1].content += raw
+		t.tags[t.depth()-1].writer.Write(raw)
 	}
 
 	// If the tag is not a template and we are not in a template now
 	// add the content directly to the output.
 	if !isTempTag && t.depth() == 0 {
-		t.output += raw
+		t.writer.Write(raw)
 	}
 	return name, nil
 }
 
-func (t *tracker) parse() (string, error) {
-	count := 0
-	for {
-		tt := t.tokenizer.Next()
-		if tt == html.ErrorToken {
-			return t.parseVariableTags(t.output), nil
-		}
-		_, err := t.feed()
+func (t *tracker) parse() io.Reader {
+	go func() {
+		count := 0
+		for {
+			tt := t.tokenizer.Next()
+			if tt == html.ErrorToken {
+				t.errChan <- nil
+			}
+			_, err := t.feed()
 
-		if err != nil {
-			return "", err
+			if err != nil {
+				t.errChan <- err
+			}
+			count++
 		}
-		count++
-	}
+	}()
+	return t.reader
 }
 
-func Parse(r io.Reader, fileLocation string) (string, error) {
-	tracker, err := newTracker(r, fileLocation, nil)
-	if err != nil {
-		return "", err
-	}
-
-	s, err := tracker.parse()
-	return s, err
+func Parse(r io.Reader, fileLocation string) (io.Reader, <-chan error) {
+	tracker := newTracker(r, fileLocation, nil)
+	return tracker.parse(), tracker.errChan
 }
 
-func parseChild(r io.Reader, fileLocation string, tracker *tracker) (string, error) {
-	tracker, err := newTracker(r, fileLocation, tracker)
-	if err != nil {
-		return "", err
-	}
-
-	return tracker.parse()
+func parseChild(r io.Reader, fileLocation string, tracker *tracker) (io.Reader, <-chan error) {
+	newTracker := newTracker(r, fileLocation, tracker)
+	return newTracker.parse(), newTracker.errChan
 }

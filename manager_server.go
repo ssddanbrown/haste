@@ -103,7 +103,10 @@ func (m *managerServer) handleFileChange(changedFile string) {
 
 			r := strings.NewReader(string(in))
 
-			newContent, err := engine.Parse(r, changedFile)
+			newContent, errChan := engine.Parse(r, changedFile)
+			for {
+				err = <-errChan
+			}
 			if err != nil {
 				devlog(err.Error())
 				return
@@ -115,7 +118,7 @@ func (m *managerServer) handleFileChange(changedFile string) {
 			defer newFile.Close()
 			check(err)
 
-			newFile.WriteString(newContent)
+			io.Copy(newFile, newContent)
 			newFile.Sync()
 			m.changedFiles <- newFileLocation
 		})

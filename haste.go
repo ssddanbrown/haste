@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/ssddanbrown/haste/engine"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,9 +31,15 @@ func main() {
 		givenFile, err := os.Open(readFilePath)
 		defer givenFile.Close()
 		check(err)
-		o, err := engine.Parse(givenFile, readFilePath)
-		check(err)
-		fmt.Println(o)
+		reader, errChan := engine.Parse(givenFile, readFilePath)
+		for {
+			aErr := <-errChan
+			if aErr != nil {
+				fmt.Println(aErr.Error())
+			}
+			break
+		}
+		io.Copy(os.Stdout, reader)
 		return
 	}
 
