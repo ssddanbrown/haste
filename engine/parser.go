@@ -67,19 +67,30 @@ func (t *templateTag) parseTemplate() (io.Reader, error) {
 		}
 	}()
 
-	return t.tracker.parseVariableTags(newr), nil
+	parseReader, _ := t.tracker.parseVariableTags(newr)
+	return parseReader, nil
 }
 
-func (t *tracker) parseVariableTags(r io.Reader) io.Reader {
+func (t *tracker) parseVariableTags(r io.Reader) (io.Reader, chan bool) {
 
 	returnReader, writer := io.Pipe()
+	buf := bufio.NewWriter(writer)
 	bufr := bufio.NewReader(r)
+	rChan := make(chan bool)
 
 	go func() {
 		for {
 			b, err := bufr.ReadBytes('\n')
+			fmt.Println(string(b))
 			if err != nil && err != io.EOF {
 				t.errChan <- err
+				rChan <- false
+				break
+			} else if err == io.EOF {
+				rChan <- true
+				buf.Write(b)
+				buf.Flush()
+				break
 			}
 
 			inTag := false
@@ -91,7 +102,7 @@ func (t *tracker) parseVariableTags(r io.Reader) io.Reader {
 				if b[i] == '{' && bLen > i+2 && b[i+1] == '{' && b[i+2] == '{' && (i == 0 || b[i-1] != '@') {
 					// Start tag
 					if inTag {
-						writer.Write(b[tagStart:i]) // Update new contents if that tag start is reset
+						buf.Write(b[tagStart:i]) // Update new contents if that tag start is reset
 					}
 					tagStart = i + 1
 					inTag = true
@@ -99,36 +110,36 @@ func (t *tracker) parseVariableTags(r io.Reader) io.Reader {
 					// End tag
 					inTag = false
 					tagKey := string(b[tagStart+2 : i])
-					writer.Write([]byte(t.vars[tagKey]))
+					buf.Write([]byte(t.vars[tagKey]))
 					tagEnd = i + 2
 				} else if inTag && i-tagStart > 100 {
 					// Tag name tracking cutoff
 					inTag = false
-					writer.Write(b[tagStart:i])
+					buf.Write(b[tagStart:i])
 				} else if !inTag && tagEnd < i {
 					// No tag
-					writer.Write([]byte{b[i]})
+					buf.Write([]byte{b[i]})
 				}
 			}
 			// Add any remaning content if a new tag was being tracked
 			if inTag {
-				writer.Write(b[tagStart:])
+				buf.Write(b[tagStart:])
 			}
 		}
 	}()
 
-	return returnReader
+	return returnReader, rChan
 }
 
 // Perform all pre-parse actions, These modify the HTML before it
 // reaches the tozeniker
-func (t *tracker) preParseTemplate(r io.Reader) io.Reader {
+func (t *tracker) preParseTemplate(r io.Reader) (io.Reader, chan bool) {
 
-	fmt.Println("hello")
 	output, writer := io.Pipe()
+	buf := bufio.NewWriter(writer)
+	rChan := make(chan bool)
 
 	go func() {
-
 		bufr := bufio.NewReader(r)
 
 		// Search, Store & remove any variables
@@ -140,14 +151,33 @@ func (t *tracker) preParseTemplate(r io.Reader) io.Reader {
 
 		for {
 			text, err := bufr.ReadBytes('\n')
+
 			if err != nil && err != io.EOF {
 				t.errChan <- err
+				rChan <- false
+				break
+			} else if err == io.EOF {
+				buf.Write(text)
+				buf.Flush()
+				rChan <- true
+				break
 			}
+
 			if readingVars {
+				textLen := len(text)
 				for i := range text {
 
-					// If start of var
-					if text[i] == '@' {
+					if !readingVars {
+						buf.WriteByte(text[i])
+						continue
+					}
+
+					if i == 0 {
+						readingLineVarName = false
+						readingLineVarValue = false
+					}
+
+					if text[i] == '@' && i == 0 {
 						readingLineVarName = true
 						readingLineVarValue = false
 						cName = []byte{}
@@ -157,24 +187,24 @@ func (t *tracker) preParseTemplate(r io.Reader) io.Reader {
 						readingLineVarName = false
 						readingLineVarValue = true
 						cVal = []byte{}
-					} else if readingLineVarValue && text[i] != '\r' {
+					} else if readingLineVarValue && text[i] != '\r' && i != textLen-1 {
 						cVal = append(cVal, text[i])
 					} else if readingLineVarValue {
 						t.vars[string(cName)] = string(cVal)
 						readingLineVarValue = false
 					} else if i == 0 {
 						readingVars = false
-						break
+						buf.WriteByte(text[i])
+						continue
 					}
 				}
 			} else {
-				writer.Write(text)
-				break
+				buf.Write(append(text, '\n'))
 			}
 		}
 	}()
 
-	return output
+	return output, rChan
 }
 
 func parseVar(line string) (key string, value string) {

@@ -1,26 +1,38 @@
-package main
+// package main
 
-import (
-	"io"
-	"os"
-)
+// import (
+// 	"fmt"
+// 	"io"
+// 	"io/ioutil"
+// 	// "os"
+// )
 
-func main() {
+// func main() {
 
-	// a := make(chan int)
+// 	a := make(chan int)
 
-	r, w := io.Pipe()
+// 	r, w := io.Pipe()
 
-	go func() {
-		// 	a <- 1
-		io.Copy(os.Stdout, r)
+// 	go func() {
+// 		// 	a <- 1
+// 		for {
 
-	}()
+// 			w.Write([]byte("hello"))
+// 		}
 
-	// for {
-	// 	_ = <-a
-	// 	return
-	// }
+// 		fmt.Println("Print")
+// 	}()
 
-	w.Write([]byte("hello"))
-}
+// 	go func() {
+// 		for {
+// 			test, _ := r.Read(data)
+// 			fmt.Println(test)
+
+// 		}
+// 	}()
+
+// 	for {
+// 		_ = <-a
+// 		return
+// 	}
+// }

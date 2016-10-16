@@ -51,7 +51,7 @@ func newTracker(r io.Reader, contextFile string, parent *tracker) *tracker {
 	t.reader, t.writer = io.Pipe()
 
 	// Preparse template and create HTML tokenizer
-	contentReader := t.preParseTemplate(r)
+	contentReader, _ := t.preParseTemplate(r)
 	t.tokenizer = html.NewTokenizer(contentReader)
 	return t
 }
