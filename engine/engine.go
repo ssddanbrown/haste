@@ -119,6 +119,12 @@ func (t *tracker) feed() (string, error) {
 		if err != nil {
 			return name, err
 		}
+	} else if isTempTag && token.Type == html.SelfClosingTagToken {
+		t.addTemplateTag(name)
+		err := t.closeTemplateTag()
+		if err != nil {
+			return name, err
+		}
 	} else if t.depth() > 0 {
 		// If not a template tag and we are in a template tag
 		// add the content to the latest tag store
