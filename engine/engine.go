@@ -24,9 +24,10 @@ type tracker struct {
 }
 
 type templateTag struct {
-	name    string
-	content string
-	tracker *tracker
+	name        string
+	content     string
+	tracker     *tracker
+	contentType string
 }
 
 func newTracker(r io.Reader, contextFile string, parent *tracker) (*tracker, error) {

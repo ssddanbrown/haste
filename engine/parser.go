@@ -10,24 +10,56 @@ import (
 	"strings"
 )
 
-func (t *templateTag) nameToPath() string {
-	p := strings.Replace(t.name, ".", "/", -1)
-	return strings.Replace(p, ":", "../", -1) + ".html"
+func (t *templateTag) nameToPath(name, ext string) string {
+	p := strings.Replace(name, ".", "/", -1)
+	p = strings.Replace(p, ":", "../", -1) + ext
+	return filepath.Join(t.tracker.contextFolderPath, p)
+}
+
+func checkFileExists(filePath string) bool {
+	_, err := os.Stat(filePath)
+	return !os.IsNotExist(err)
+}
+
+func (t *templateTag) searchForPossibleFiles() (string, error) {
+	htmlPath := t.nameToPath(t.name, ".html")
+	likelyLocations := []string{htmlPath}
+	if checkFileExists(htmlPath) {
+		t.contentType = "html"
+		return htmlPath, nil
+	}
+
+	altTypes := []string{"css", "js"}
+	for i := range altTypes {
+		ext := "." + altTypes[i]
+		if strings.HasSuffix(t.name, ext) {
+			filePath := t.nameToPath(strings.TrimSuffix(t.name, ext), ext)
+			likelyLocations = append(likelyLocations, filePath)
+			if checkFileExists(filePath) {
+				t.contentType = altTypes[i]
+				return filePath, nil
+			}
+		}
+	}
+
+	errMsg := fmt.Sprintf("Could not find tag with name \"%s\" at of the following locations:\n%s", t.name, strings.Join(likelyLocations, "\n"))
+	return "", errors.New(errMsg)
 }
 
 func (t *templateTag) parseTemplate() (string, error) {
-	tempFilePath := filepath.Join(t.tracker.contextFolderPath, t.nameToPath())
+
+	fileLocation, err := t.searchForPossibleFiles()
+	if err != nil {
+		return "", err
+	}
+
 	var r io.Reader
 
-	if val, ok := t.tracker.templateContent[tempFilePath]; ok {
+	if val, ok := t.tracker.templateContent[fileLocation]; ok {
 		r = strings.NewReader(val)
 	} else {
-		// If template file does not exist, throw an error
-		if _, err := os.Stat(tempFilePath); os.IsNotExist(err) {
-			return "", errors.New(fmt.Sprintf("Template tag with name \"%s\" does not have a template file at \"%s\"", t.name, tempFilePath))
-		}
 
-		tempFile, err := os.Open(tempFilePath)
+		tempFile, err := os.Open(fileLocation)
 		defer tempFile.Close()
 		if err != nil {
 			return "", err
@@ -38,20 +70,27 @@ func (t *templateTag) parseTemplate() (string, error) {
 		}
 
 		contentString := string(content)
-		t.tracker.templateContent[tempFilePath] = contentString
+		t.tracker.templateContent[fileLocation] = contentString
 		r = strings.NewReader(contentString)
 	}
 
 	// Parse in the child content
-	templateContent, err := parseChild(r, tempFilePath, t.tracker)
+	templateContent, err := parseChild(r, fileLocation, t.tracker)
 	if err != nil {
 		return "", err
 	}
 
 	// Replace the defined @content section with parsed template tag contents
-	c := strings.Replace(templateContent, "@content", t.content, -1)
+	tContent := strings.Replace(templateContent, "@content", t.content, -1)
+	tContent = t.tracker.parseVariableTags(tContent)
 
-	return t.tracker.parseVariableTags(c), nil
+	if t.contentType == "css" {
+		tContent = "<style>\n" + tContent + "\n</style>"
+	} else if t.contentType == "js" {
+		tContent = "<script>\n" + tContent + "\n</script>"
+	}
+
+	return tContent, nil
 }
 
 func (t *tracker) parseVariableTags(s string) string {
