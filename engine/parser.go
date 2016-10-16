@@ -11,12 +11,12 @@ import (
 )
 
 func (t *templateTag) nameToPath() string {
-	return strings.Replace(t.name, ".", "/", -1) + ".html"
+	p := strings.Replace(t.name, ".", "/", -1)
+	return strings.Replace(p, ":", "../", -1) + ".html"
 }
 
 func (t *templateTag) parseTemplate() (string, error) {
 	tempFilePath := filepath.Join(t.tracker.contextFolderPath, t.nameToPath())
-
 	var r io.Reader
 
 	if val, ok := t.tracker.templateContent[tempFilePath]; ok {
