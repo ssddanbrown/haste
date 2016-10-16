@@ -48,6 +48,10 @@ Here are some more advanced example of what you can do with the syntax:
 <!-- If no content injection is required, template tags can be self-closing -->
 <t:button/>
 
+<!-- Included CSS and JS files will have their contents injected into <style> or <script> tags -->
+<t:styles.css/>
+<t:styles.js/>
+
 ```
 
 ### Variables
