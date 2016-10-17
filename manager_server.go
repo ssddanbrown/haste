@@ -205,17 +205,28 @@ func (m *managerServer) watchFolder(folderPath string) error {
 func (manager *managerServer) getManagerRouting() *http.ServeMux {
 
 	handler := http.NewServeMux()
+	customServeMux := http.NewServeMux()
+
+	customServeMux.Handle("/", http.FileServer(http.Dir(filepath.Dir(manager.watchedFile))))
 
 	// Get our generated HTML file
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		file, err := os.Open(getGenFileName(manager.watchedFile))
-		check(err)
-		w.Header().Add("Cache-Control", "no-cache")
-		w.Header().Add("Content-Type", "text/html")
-		io.Copy(w, file)
-		if manager.LiveReload {
-			fmt.Fprintln(w, "\n<script src=\"/livereload.js\"></script>")
+
+		if r.URL.Path != "/" {
+			fmt.Println(r.URL.Path)
+			customServeMux.ServeHTTP(w, r)
+		} else {
+
+			file, err := os.Open(getGenFileName(manager.watchedFile))
+			check(err)
+			w.Header().Add("Cache-Control", "no-cache")
+			w.Header().Add("Content-Type", "text/html")
+			io.Copy(w, file)
+			if manager.LiveReload {
+				fmt.Fprintln(w, "\n<script src=\"/livereload.js\"></script>")
+			}
 		}
+
 	})
 
 	if !manager.LiveReload {
