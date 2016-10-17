@@ -96,7 +96,7 @@ func (m *managerServer) handleFileChange(changedFile string) {
 
 			newContent, err := engine.Parse(r, m.watchedFile)
 			if err != nil {
-				devlog(err.Error())
+				errlog(err)
 				return
 			}
 

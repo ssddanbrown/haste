@@ -161,8 +161,7 @@ func Parse(r io.Reader, fileLocation string) (string, error) {
 		return "", err
 	}
 
-	s, err := tracker.parse()
-	return s, err
+	return tracker.parse()
 }
 
 func parseChild(r io.Reader, fileLocation string, tracker *tracker) (string, error) {
