@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/ssddanbrown/haste/engine"
 	"net"
 	"os"
@@ -91,6 +92,12 @@ func check(err error) {
 func devlog(s string) {
 	if isVerbose {
 		fmt.Println(s)
+	}
+}
+
+func errlog(err error) {
+	if err != nil {
+		color.Red(err.Error())
 	}
 }
 
