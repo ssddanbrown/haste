@@ -93,6 +93,7 @@ By default the application outputs to the command line. With the `-w` flag files
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| -b   |         | Batch parse mode. Reads in multiple files and <br> outputs to the folder given as the last parameter.    |
 | -w   |         | Watch file for changes and auto-compile on change. <br> Outputs to `<filename>.gen.html`.  <br> Starts a http server for file serving and opens the browser automatically.    |
 | -l   |         | Enable livereload (When watching) |
 | -p   | 8081    | Port to listen on (When watching) |
@@ -116,6 +117,9 @@ By default the application outputs to the command line. With the `-w` flag files
 # and listen to file changes up to 5 folder levels deep.
 ./haste -w -l -p 80 -d 5 index.html
 
+# Build all files with the extension of .haste.html and output to
+# the folder 'dist' keeping the same folder structure as the input files.
+./haste -b **/*.haste.html dist
 ```
 
 ## Issues and Contribution

@@ -21,6 +21,7 @@ func main() {
 	liveReload := flag.Bool("l", false, "Enable livereload (When watching only)")
 	verbose := flag.Bool("v", false, "Enable verbose ouput")
 	watchDepth := flag.Int("d", 2, "Child folder watch depth (When watching only)")
+	batchMode := flag.Bool("b", false, "Enable batch generation mode")
 
 	flag.Parse()
 	isVerbose = *verbose
@@ -35,7 +36,7 @@ func main() {
 	check(err)
 
 	// Print to stdout if not watching
-	if !*watch {
+	if !*watch && !*batchMode {
 		givenFile, err := os.Open(readFilePath)
 		defer givenFile.Close()
 		check(err)
@@ -45,26 +46,92 @@ func main() {
 		return
 	}
 
+	if *batchMode {
+		batchGenerate(flag.Args())
+	}
+
+	// Watch if specified
+	if *watch {
+		startWatcher(readFilePath, *port, *liveReload, *watchDepth)
+	}
+
+}
+
+func batchGenerate(input []string) {
+	if len(input) < 2 {
+		errOut("Batch mode requires specified input files and an output folder as the last parameter. For example:")
+		errOut("haste page1.html page2.html dist")
+	}
+
+	files := input[:len(input)-1]
+	fileCount := len(files)
+	dir := input[len(input)-1]
+	waitChan := make(chan bool)
+	outPath, err := filepath.Abs(filepath.Join("./", dir))
+	check(err)
+
+	for _, filePath := range files {
+		go func() {
+			absInPath, err := filepath.Abs(filepath.Join("./", filePath))
+			check(err)
+			absOutPath, err := filepath.Abs(filepath.Join("./", dir, filePath))
+			check(err)
+
+			file, err := os.Open(absInPath)
+			defer file.Close()
+			check(err)
+
+			content, err := engine.Parse(file, filePath)
+			check(err)
+
+			// Write file to ouput
+			outDir := filepath.Dir(absOutPath)
+			if _, err := os.Stat(outDir); err != nil {
+				if os.IsNotExist(err) {
+					os.MkdirAll(outDir, 0755)
+				} else {
+					check(err)
+				}
+			}
+			outFile, err := os.Create(absOutPath)
+			defer outFile.Close()
+			check(err)
+			outFile.WriteString(content)
+			outFile.Sync()
+			devlog(fmt.Sprintf("File from:\n%s\nparsed and written to:\n%s", absInPath, absOutPath))
+			waitChan <- true
+		}()
+	}
+
+	finCount := 0
+	for finCount < fileCount {
+		_ = <-waitChan
+		finCount++
+	}
+
+	color.Green("%d files successfully generated into folder %s", fileCount, outPath)
+}
+
+func startWatcher(path string, port int, livereload bool, depth int) {
 	manager := &managerServer{
-		watchedFile: readFilePath,
-		Port:        *port,
-		LiveReload:  *liveReload,
-		WatchDepth:  *watchDepth,
+		watchedFile: path,
+		Port:        port,
+		LiveReload:  livereload,
+		WatchDepth:  depth,
 	}
 
 	portFree := checkPortFree(manager.Port)
-
 	if !portFree {
 		fmt.Printf("Listen port %d not available, Are you already running haste?\n", manager.Port)
 		return
 	}
 
-	manager.addWatchedFolder(readFilePath)
+	manager.addWatchedFolder(path)
 
 	fmt.Sprintf("Server started at http://localhost:%d", manager.Port)
 	openWebPage(fmt.Sprintf("http://localhost:%d/", manager.Port))
 
-	err = manager.listen()
+	err := manager.listen()
 	check(err)
 }
 
@@ -91,7 +158,7 @@ func check(err error) {
 
 func devlog(s string) {
 	if isVerbose {
-		fmt.Println(s)
+		color.Blue(s)
 	}
 }
 
@@ -99,6 +166,10 @@ func errlog(err error) {
 	if err != nil {
 		color.Red(err.Error())
 	}
+}
+
+func errOut(m string) {
+	color.Red(m)
 }
 
 func stringInSlice(str string, list []string) bool {
