@@ -28,6 +28,7 @@ type templateTag struct {
 	content     string
 	tracker     *tracker
 	contentType string
+	attrs       []*html.Attribute
 }
 
 func newTracker(r io.Reader, contextFile string, parent *tracker) (*tracker, error) {
@@ -56,9 +57,9 @@ func newTracker(r io.Reader, contextFile string, parent *tracker) (*tracker, err
 }
 
 // Adds a new template tag to the stack
-func (t *tracker) addTemplateTag(tagName string) *templateTag {
+func (t *tracker) addTemplateTag(tagName string, attrs []*html.Attribute) *templateTag {
 	templateName := tagName[2:]
-	tag := &templateTag{name: templateName, tracker: t}
+	tag := &templateTag{name: templateName, tracker: t, attrs: attrs}
 	t.tags = append(t.tags, tag)
 	return tag
 }
@@ -75,12 +76,17 @@ func (t *tracker) closeTemplateTag() (err error) {
 		closingTag = t.tags[0]
 	}
 
-	key := t.contextFile + ":" + closingTag.name + ":" + closingTag.content
+	attrHash := ""
+	for i := 0; i < len(closingTag.attrs); i++ {
+		attrHash += fmt.Sprint("[%s=%s]", closingTag.attrs[i].Key, closingTag.attrs[i].Val)
+	}
+	key := t.contextFile + ":" + closingTag.name + ":" + closingTag.content + ":" + attrHash
+
 	var content string
 	if val, ok := t.parsedTemplateCache[key]; ok {
 		content = val
 	} else {
-		content, err = closingTag.parseTemplate()
+		content, err = closingTag.parseTemplate(closingTag.attrs)
 		if err != nil {
 			return
 		}
@@ -105,37 +111,53 @@ func (t *tracker) depth() int {
 // feed in another token from the tag tokenizer.
 func (t *tracker) feed() (string, error) {
 	raw := string(t.tokenizer.Raw())
-	nameBytes, _ := t.tokenizer.TagName()
-	token := t.tokenizer.Token()
+	nameBytes, hasAttr := t.tokenizer.TagName()
 	name := string(nameBytes)
 
 	// TODO - Make template tag configurable
 	isTempTag := (len(name) >= 2 && name[0:2] == "t:")
 
+	if !isTempTag {
+		if t.depth() > 0 {
+			// If not a template tag and we are in a template tag
+			// add the content to the latest tag store
+			t.tags[t.depth()-1].content += raw
+		} else {
+			t.output += raw
+		}
+		return name, nil
+	}
+
+	// TODO - optimize to prevent running on every tag
+	var attrs []*html.Attribute
+	if hasAttr {
+		for {
+			key, val, hasMore := t.tokenizer.TagAttr()
+			newAttribute := &html.Attribute{Key: string(key), Val: string(val)}
+			attrs = append(attrs, newAttribute)
+			if !hasMore {
+				break
+			}
+		}
+	}
+
+	token := t.tokenizer.Token()
+
 	if isTempTag && token.Type == html.StartTagToken {
-		t.addTemplateTag(name)
+		t.addTemplateTag(name, attrs)
 	} else if isTempTag && token.Type == html.EndTagToken {
 		err := t.closeTemplateTag()
 		if err != nil {
 			return name, err
 		}
 	} else if isTempTag && token.Type == html.SelfClosingTagToken {
-		t.addTemplateTag(name)
+		t.addTemplateTag(name, attrs)
 		err := t.closeTemplateTag()
 		if err != nil {
 			return name, err
 		}
-	} else if t.depth() > 0 {
-		// If not a template tag and we are in a template tag
-		// add the content to the latest tag store
-		t.tags[t.depth()-1].content += raw
 	}
 
-	// If the tag is not a template and we are not in a template now
-	// add the content directly to the output.
-	if !isTempTag && t.depth() == 0 {
-		t.output += raw
-	}
 	return name, nil
 }
 
@@ -155,6 +177,8 @@ func (t *tracker) parse() (string, error) {
 	}
 }
 
+// Parse the contents of the reader and feed the output as a compiled
+// and complete string.
 func Parse(r io.Reader, fileLocation string) (string, error) {
 	tracker, err := newTracker(r, fileLocation, nil)
 	if err != nil {
@@ -164,11 +188,15 @@ func Parse(r io.Reader, fileLocation string) (string, error) {
 	return tracker.parse()
 }
 
-func parseChild(r io.Reader, fileLocation string, tracker *tracker) (string, error) {
-	tracker, err := newTracker(r, fileLocation, tracker)
+func parseChild(r io.Reader, fileLocation string, tracker *tracker, attrs []*html.Attribute) (string, error) {
+	t, err := newTracker(r, fileLocation, tracker)
+	for i := 0; i < len(attrs); i++ {
+		t.vars[attrs[i].Key] = attrs[i].Val
+	}
+
 	if err != nil {
 		return "", err
 	}
 
-	return tracker.parse()
+	return t.parse()
 }

@@ -3,7 +3,7 @@ all:
 	go install github.com/ssddanbrown/haste
 run:
 	rice embed-go
-	go install github.com/ssddanbrown/haste && haste testfile.html
+	go install github.com/ssddanbrown/haste && haste testfile.html > testfile.gen.html
 watch:
 	rice embed-go
 	go install github.com/ssddanbrown/haste && haste -w testfile.html

@@ -71,7 +71,7 @@ func batchGenerate(input []string) {
 	check(err)
 
 	for _, filePath := range files {
-		go func() {
+		go func(filePath string) {
 			absInPath, err := filepath.Abs(filepath.Join("./", filePath))
 			check(err)
 			absOutPath, err := filepath.Abs(filepath.Join("./", dir, filePath))
@@ -86,7 +86,7 @@ func batchGenerate(input []string) {
 
 			// Write file to ouput
 			outDir := filepath.Dir(absOutPath)
-			if _, err := os.Stat(outDir); err != nil {
+			if _, fileErr := os.Stat(outDir); fileErr != nil {
 				if os.IsNotExist(err) {
 					os.MkdirAll(outDir, 0755)
 				} else {
@@ -100,7 +100,7 @@ func batchGenerate(input []string) {
 			outFile.Sync()
 			devlog(fmt.Sprintf("File from:\n%s\nparsed and written to:\n%s", absInPath, absOutPath))
 			waitChan <- true
-		}()
+		}(filePath)
 	}
 
 	finCount := 0
@@ -128,7 +128,7 @@ func startWatcher(path string, port int, livereload bool, depth int) {
 
 	manager.addWatchedFolder(path)
 
-	fmt.Sprintf("Server started at http://localhost:%d", manager.Port)
+	color.Green(fmt.Sprintf("Server started at http://localhost:%d", manager.Port))
 	openWebPage(fmt.Sprintf("http://localhost:%d/", manager.Port))
 
 	err := manager.listen()

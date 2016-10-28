@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"golang.org/x/net/html"
 	"io"
 	"io/ioutil"
 	"os"
@@ -46,7 +47,7 @@ func (t *templateTag) searchForPossibleFiles() (string, error) {
 	return "", errors.New(errMsg)
 }
 
-func (t *templateTag) parseTemplate() (string, error) {
+func (t *templateTag) parseTemplate(attrs []*html.Attribute) (string, error) {
 
 	fileLocation, err := t.searchForPossibleFiles()
 	if err != nil {
@@ -59,14 +60,14 @@ func (t *templateTag) parseTemplate() (string, error) {
 		r = strings.NewReader(val)
 	} else {
 
-		tempFile, err := os.Open(fileLocation)
+		tempFile, fileErr := os.Open(fileLocation)
 		defer tempFile.Close()
-		if err != nil {
-			return "", err
+		if fileErr != nil {
+			return "", fileErr
 		}
-		content, err := ioutil.ReadAll(tempFile)
-		if err != nil {
-			return "", err
+		content, fileErr := ioutil.ReadAll(tempFile)
+		if fileErr != nil {
+			return "", fileErr
 		}
 
 		contentString := string(content)
@@ -75,7 +76,7 @@ func (t *templateTag) parseTemplate() (string, error) {
 	}
 
 	// Parse in the child content
-	templateContent, err := parseChild(r, fileLocation, t.tracker)
+	templateContent, err := parseChild(r, fileLocation, t.tracker, attrs)
 	if err != nil {
 		return "", err
 	}
@@ -98,7 +99,7 @@ func (t *tracker) parseVariableTags(s string) string {
 	tagStart := 0
 	tagEnd := -1
 
-	newContent := make([]byte, 0)
+	var newContent []byte
 	symbols := []byte("{}@")
 	b := []byte(s)
 	bLen := len(b)
