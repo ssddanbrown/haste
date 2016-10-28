@@ -79,6 +79,15 @@ Variables must be defined on the first lines of a file with no whitespace procee
 
 Variables will pass down through template files but will not pass back up so parent template files will not see variables defined in child templates. Child variables inherit parent variables and will overwrite any existing if redefined.
 
+#### Variable Injection via Attributes
+
+Variables can be injected into child templates via the use of attributes on the template tag. For example, in the HTML below the variable named `author` will be available as a variable to the child template `book` with a value of `Dan Brown`.
+
+```html
+  <t:book author="Dan Brown"></t:book>
+``` 
+
+
 ## Command Line Usage
 
 Download the relevant executable file for your platform from the [latest release page](https://github.com/ssddanbrown/haste/releases/latest) and ensure it has executable permissions. Rename the executable to haste to make it quicker to run. Place haste either local to your HTML file or move it somewhere in your path so it can be executed globally.
