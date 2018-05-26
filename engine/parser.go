@@ -3,12 +3,13 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/net/html"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/net/html"
 )
 
 func (t *templateTag) nameToPath(name, ext string) string {

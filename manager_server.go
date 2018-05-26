@@ -2,10 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/GeertJohan/go.rice"
-	"github.com/howeyc/fsnotify"
-	"github.com/ssddanbrown/haste/engine"
-	"golang.org/x/net/websocket"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -14,6 +10,11 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/GeertJohan/go.rice"
+	"github.com/howeyc/fsnotify"
+	"github.com/ssddanbrown/haste/engine"
+	"golang.org/x/net/websocket"
 )
 
 type managerServer struct {

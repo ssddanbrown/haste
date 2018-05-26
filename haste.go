@@ -3,13 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/ssddanbrown/haste/engine"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	"github.com/fatih/color"
+	"github.com/ssddanbrown/haste/engine"
 )
 
 var isVerbose bool
