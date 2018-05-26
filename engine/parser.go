@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -77,7 +78,7 @@ func (t *templateTag) parseTemplate(attrs []*html.Attribute) (string, error) {
 	}
 
 	// Parse in the child content
-	templateContent, err := parseChild(r, fileLocation, t.tracker, attrs)
+	templateContent, err := parseChild(r, fileLocation, t.tracker.contextFolderPath, t.tracker, attrs)
 	if err != nil {
 		return "", err
 	}
@@ -101,35 +102,43 @@ func (t *tracker) parseVariableTags(s string) string {
 	tagEnd := -1
 
 	var newContent []byte
-	symbols := []byte("{}@")
-	b := []byte(s)
-	bLen := len(b)
-	for i := range b {
-		if b[i] == symbols[0] && bLen > i+2 && b[i+1] == symbols[0] && b[i+2] == symbols[0] && (i == 0 || b[i-1] != symbols[2]) {
+
+	startTag := []byte("{{{")
+	escChar := byte('@')
+	startTagLen := len(startTag)
+	endTag := []byte("}}}")
+	endTagLen := len(endTag)
+
+	content := []byte(s)
+	contentLen := len(content)
+
+	for i := range content {
+		if contentLen >= i+startTagLen && bytes.Equal(content[i:i+startTagLen], startTag) && (i == 0 || content[i-1] != escChar) {
 			// Start tag
 			if inTag {
-				newContent = append(newContent, b[tagStart:i]...) // Update new contents if that tag start is reset
+				// Update new contents if that tag start is reset
+				newContent = append(newContent, content[tagStart:i]...)
 			}
-			tagStart = i + 1
+			tagStart = i
 			inTag = true
-		} else if inTag && b[i] == symbols[1] && bLen > i+2 && b[i+1] == symbols[1] && b[i+2] == symbols[1] {
+		} else if inTag && contentLen >= endTagLen && bytes.Equal(content[i:i+endTagLen], endTag) && (i == 0 || content[i-1] != escChar) {
 			// End tag
 			inTag = false
-			tagKey := string(b[tagStart+2 : i])
+			tagKey := string(content[tagStart+startTagLen : i])
 			newContent = append(newContent, t.vars[tagKey]...)
-			tagEnd = i + 2
+			tagEnd = i + endTagLen - 1
 		} else if inTag && i-tagStart > 100 {
 			// Tag name tracking cutoff
 			inTag = false
-			newContent = append(newContent, b[tagStart:i]...)
+			newContent = append(newContent, content[tagStart:i]...)
 		} else if !inTag && tagEnd < i {
 			// No tag
-			newContent = append(newContent, b[i])
+			newContent = append(newContent, content[i])
 		}
 	}
 	// Add any remaning content if a new tag was being tracked
 	if inTag {
-		newContent = append(newContent, b[tagStart:]...)
+		newContent = append(newContent, content[tagStart:]...)
 	}
 	return string(newContent)
 }
@@ -149,27 +158,31 @@ func (t *tracker) preParseTemplate(r io.Reader) (string, error) {
 	readingLineVarValue := false
 	cName := ""
 	cVal := ""
-	symbols := []byte("@\n=\r")
 
-	for i := range text {
+	varChar := byte('@')
+	varSep := byte('=')
+	newLine := byte('\n')
+	lineReturn := byte('\r')
+
+	for i, cChar := range text {
 		if readingVars {
 			// If start of var
-			if text[i] == symbols[0] && (i == 0 || text[i-1] == symbols[1]) {
+			if cChar == varChar && (i == 0 || text[i-1] == newLine) {
 				readingLineVarName = true
 				readingLineVarValue = false
 				cName = ""
-			} else if readingLineVarName && text[i] != symbols[1] && text[i] != symbols[2] {
-				cName += string(text[i])
-			} else if readingLineVarName && text[i] == symbols[2] {
+			} else if readingLineVarName && cChar != newLine && cChar != varSep {
+				cName += string(cChar)
+			} else if readingLineVarName && cChar == varSep {
 				readingLineVarName = false
 				readingLineVarValue = true
 				cVal = ""
-			} else if readingLineVarValue && text[i] != symbols[1] && text[i] != symbols[3] {
-				cVal += string(text[i])
+			} else if readingLineVarValue && cChar != newLine && cChar != lineReturn {
+				cVal += string(cChar)
 			} else if readingLineVarValue {
 				t.vars[cName] = cVal
 				readingLineVarValue = false
-			} else if i == 0 || text[i-1] == symbols[1] {
+			} else if i == 0 || text[i-1] == newLine {
 				readingVars = false
 			}
 		} else {
@@ -178,15 +191,4 @@ func (t *tracker) preParseTemplate(r io.Reader) (string, error) {
 		}
 	}
 	return fileContents, nil
-}
-
-func parseVar(line string) (key string, value string) {
-	if line[0] != "@"[0] {
-		return
-	}
-	equalsPos := strings.Index(line, "=")
-	if equalsPos == -1 {
-		return
-	}
-	return line[1:equalsPos], line[equalsPos+1:]
 }

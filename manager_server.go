@@ -95,7 +95,8 @@ func (m *managerServer) handleFileChange(changedFile string) {
 
 			r := strings.NewReader(string(in))
 
-			newContent, err := engine.Parse(r, m.watchedFile)
+			// TODO - To change dir used
+			newContent, err := engine.Parse(r, m.watchedFile, filepath.Dir(m.watchedFile))
 			if err != nil {
 				errlog(err)
 				return

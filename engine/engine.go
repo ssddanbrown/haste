@@ -3,7 +3,6 @@ package engine
 import (
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -32,11 +31,11 @@ type templateTag struct {
 	attrs       []*html.Attribute
 }
 
-func newTracker(r io.Reader, contextFile string, parent *tracker) (*tracker, error) {
+func newTracker(r io.Reader, contextFile string, contextFolder string, parent *tracker) (*tracker, error) {
 	t := &tracker{
 		tags:              make([]*templateTag, 0),
 		contextFile:       contextFile,
-		contextFolderPath: filepath.Dir(contextFile),
+		contextFolderPath: contextFolder,
 	}
 
 	t.parsedTemplateCache = make(map[string]string)
@@ -180,8 +179,8 @@ func (t *tracker) parse() (string, error) {
 
 // Parse the contents of the reader and feed the output as a compiled
 // and complete string.
-func Parse(r io.Reader, fileLocation string) (string, error) {
-	tracker, err := newTracker(r, fileLocation, nil)
+func Parse(r io.Reader, fileLocation string, rootFolder string) (string, error) {
+	tracker, err := newTracker(r, fileLocation, rootFolder, nil)
 	if err != nil {
 		return "", err
 	}
@@ -189,8 +188,8 @@ func Parse(r io.Reader, fileLocation string) (string, error) {
 	return tracker.parse()
 }
 
-func parseChild(r io.Reader, fileLocation string, tracker *tracker, attrs []*html.Attribute) (string, error) {
-	t, err := newTracker(r, fileLocation, tracker)
+func parseChild(r io.Reader, fileLocation string, contextFolder string, tracker *tracker, attrs []*html.Attribute) (string, error) {
+	t, err := newTracker(r, fileLocation, contextFolder, tracker)
 	for i := 0; i < len(attrs); i++ {
 		t.vars[attrs[i].Key] = attrs[i].Val
 	}

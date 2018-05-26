@@ -23,6 +23,7 @@ func main() {
 	verbose := flag.Bool("v", false, "Enable verbose ouput")
 	watchDepth := flag.Int("d", 2, "Child folder watch depth (When watching only)")
 	batchMode := flag.Bool("b", false, "Enable batch generation mode")
+	rootPathPtr := flag.String("r", "./", "The root relative directory build path for template location")
 
 	flag.Parse()
 	isVerbose = *verbose
@@ -34,6 +35,8 @@ func main() {
 
 	readFile := flag.Args()[0]
 	readFilePath, err := filepath.Abs(filepath.Join("./", readFile))
+	wd, err := os.Getwd()
+	rootPath, err := filepath.Abs(filepath.Join(wd, *rootPathPtr))
 	check(err)
 
 	// Print to stdout if not watching
@@ -41,14 +44,14 @@ func main() {
 		givenFile, err := os.Open(readFilePath)
 		defer givenFile.Close()
 		check(err)
-		o, err := engine.Parse(givenFile, readFilePath)
+		o, err := engine.Parse(givenFile, readFilePath, rootPath)
 		check(err)
 		fmt.Println(o)
 		return
 	}
 
 	if *batchMode {
-		batchGenerate(flag.Args())
+		batchGenerate(flag.Args(), rootPath)
 	}
 
 	// Watch if specified
@@ -58,7 +61,7 @@ func main() {
 
 }
 
-func batchGenerate(input []string) {
+func batchGenerate(input []string, rootPath string) {
 	if len(input) < 2 {
 		errOut("Batch mode requires specified input files and an output folder as the last parameter. For example:")
 		errOut("haste page1.html page2.html dist")
@@ -82,7 +85,7 @@ func batchGenerate(input []string) {
 			defer file.Close()
 			check(err)
 
-			content, err := engine.Parse(file, filePath)
+			content, err := engine.Parse(file, filePath, rootPath)
 			check(err)
 
 			// Write file to ouput
