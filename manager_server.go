@@ -18,15 +18,20 @@ import (
 )
 
 type managerServer struct {
-	WatchedFolders []string
-	fileWatcher    *fsnotify.Watcher
-	changedFiles   chan string
-	sockets        []*websocket.Conn
-	lastFileChange int64
-	Port           int
-	watchedFile    string
-	LiveReload     bool
-	WatchDepth     int
+	WatchedFolders   []string
+	fileWatcher      *fsnotify.Watcher
+	changedFiles     chan string
+	sockets          []*websocket.Conn
+	lastFileChange   int64
+	Port             int
+	WatchedPath      string
+	WatchedRootFiles []string
+	LiveReload       bool
+	WatchDepth       int
+}
+
+func (m *managerServer) watchingFolder() bool {
+	return filepath.Ext(m.WatchedPath) == ""
 }
 
 func (m *managerServer) addWatchedFolder(htmlFilePath string) {
@@ -88,22 +93,24 @@ func (m *managerServer) handleFileChange(changedFile string) {
 		}
 	}
 
+	// Add file to known root folders
+
 	if reload {
 		time.AfterFunc(100*time.Millisecond, func() {
-			in, err := ioutil.ReadFile(m.watchedFile)
+			in, err := ioutil.ReadFile(m.WatchedPath)
 			check(err)
 
 			r := strings.NewReader(string(in))
 
 			// TODO - To change dir used
-			newContent, err := engine.Parse(r, m.watchedFile, filepath.Dir(m.watchedFile))
+			newContent, err := engine.Parse(r, m.WatchedPath, filepath.Dir(m.WatchedPath))
 			if err != nil {
 				errlog(err)
 				return
 			}
 
-			newFileName := getGenFileName(m.watchedFile)
-			newFileLocation := filepath.Join(filepath.Dir(m.watchedFile), "./"+newFileName)
+			newFileName := getGenFileName(m.WatchedPath)
+			newFileLocation := filepath.Join(filepath.Dir(m.WatchedPath), "./"+newFileName)
 			newFile, err := os.Create(newFileLocation)
 			defer newFile.Close()
 			check(err)
@@ -209,7 +216,7 @@ func (manager *managerServer) getManagerRouting() *http.ServeMux {
 	handler := http.NewServeMux()
 	customServeMux := http.NewServeMux()
 
-	customServeMux.Handle("/", http.FileServer(http.Dir(filepath.Dir(manager.watchedFile))))
+	customServeMux.Handle("/", http.FileServer(http.Dir(filepath.Dir(manager.WatchedPath))))
 
 	// Get our generated HTML file
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -219,7 +226,7 @@ func (manager *managerServer) getManagerRouting() *http.ServeMux {
 			customServeMux.ServeHTTP(w, r)
 		} else {
 
-			file, err := os.Open(getGenFileName(manager.watchedFile))
+			file, err := os.Open(getGenFileName(manager.WatchedPath))
 			check(err)
 			w.Header().Add("Cache-Control", "no-cache")
 			w.Header().Add("Content-Type", "text/html")

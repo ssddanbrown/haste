@@ -17,47 +17,54 @@ var isVerbose bool
 
 func main() {
 
-	watch := flag.Bool("w", false, "Watch HTML file and auto-compile")
-	port := flag.Int("p", 8081, "Provide a port to listen on")
-	liveReload := flag.Bool("l", false, "Enable livereload (When watching only)")
+	// watch := flag.Bool("w", false, "Watch HTML file and auto-compile")
+	// port := flag.Int("p", 8081, "Provide a port to listen on")
+	// liveReload := flag.Bool("l", false, "Enable livereload (When watching only)")
 	verbose := flag.Bool("v", false, "Enable verbose ouput")
-	watchDepth := flag.Int("d", 2, "Child folder watch depth (When watching only)")
-	batchMode := flag.Bool("b", false, "Enable batch generation mode")
+	distPtr := flag.String("d", "./dist/", "Output folder for generated content")
 	rootPathPtr := flag.String("r", "./", "The root relative directory build path for template location")
 
 	flag.Parse()
 	isVerbose = *verbose
 
-	if len(flag.Args()) < 1 {
-		fmt.Println("File to parse required")
-		return
-	}
-
-	readFile := flag.Args()[0]
-	readFilePath, err := filepath.Abs(filepath.Join("./", readFile))
 	wd, err := os.Getwd()
 	rootPath, err := filepath.Abs(filepath.Join(wd, *rootPathPtr))
+	distPath, err := filepath.Abs(filepath.Join(wd, *distPtr))
+	check(err)
+
+	manager := engine.NewManager(rootPath, distPath)
+
+	if len(flag.Args()) > 0 {
+		for _, inputPath := range flag.Args() {
+			err = manager.LoadPath(inputPath)
+		}
+	} else {
+		err = manager.LoadPath(wd)
+	}
+
+	manager.BuildFirst()
+
 	check(err)
 
 	// Print to stdout if not watching
-	if !*watch && !*batchMode {
-		givenFile, err := os.Open(readFilePath)
-		defer givenFile.Close()
-		check(err)
-		o, err := engine.Parse(givenFile, readFilePath, rootPath)
-		check(err)
-		fmt.Println(o)
-		return
-	}
+	// if !*watch {
+	// 	givenFile, err := os.Open(readFilePath)
+	// 	defer givenFile.Close()
+	// 	check(err)
+	// 	o, err := engine.Parse(givenFile, readFilePath, rootPath)
+	// 	check(err)
+	// 	fmt.Println(o)
+	// 	return
+	// }
 
-	if *batchMode {
-		batchGenerate(flag.Args(), rootPath)
-	}
+	// if *batchMode {
+	// 	batchGenerate(flag.Args(), rootPath)
+	// }
 
-	// Watch if specified
-	if *watch {
-		startWatcher(readFilePath, *port, *liveReload, *watchDepth)
-	}
+	// // Watch if specified
+	// if *watch {
+	// 	startWatcher(readFilePath, *port, *liveReload, *watchDepth)
+	// }
 
 }
 
@@ -118,7 +125,7 @@ func batchGenerate(input []string, rootPath string) {
 
 func startWatcher(path string, port int, livereload bool, depth int) {
 	manager := &managerServer{
-		watchedFile: path,
+		WatchedPath: path,
 		Port:        port,
 		LiveReload:  livereload,
 		WatchDepth:  depth,

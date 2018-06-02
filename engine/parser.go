@@ -156,7 +156,7 @@ func (t *tracker) preParseTemplate(r io.Reader) (string, error) {
 	readingVars := true
 	readingLineVarName := false
 	readingLineVarValue := false
-	cName := ""
+	currentVarName := ""
 	cVal := ""
 
 	varChar := byte('@')
@@ -170,9 +170,9 @@ func (t *tracker) preParseTemplate(r io.Reader) (string, error) {
 			if cChar == varChar && (i == 0 || text[i-1] == newLine) {
 				readingLineVarName = true
 				readingLineVarValue = false
-				cName = ""
+				currentVarName = ""
 			} else if readingLineVarName && cChar != newLine && cChar != varSep {
-				cName += string(cChar)
+				currentVarName += string(cChar)
 			} else if readingLineVarName && cChar == varSep {
 				readingLineVarName = false
 				readingLineVarValue = true
@@ -180,7 +180,7 @@ func (t *tracker) preParseTemplate(r io.Reader) (string, error) {
 			} else if readingLineVarValue && cChar != newLine && cChar != lineReturn {
 				cVal += string(cChar)
 			} else if readingLineVarValue {
-				t.vars[cName] = cVal
+				t.vars[currentVarName] = cVal
 				readingLineVarValue = false
 			} else if i == 0 || text[i-1] == newLine {
 				readingVars = false
