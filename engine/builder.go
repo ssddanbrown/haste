@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+
+	"golang.org/x/net/html"
 )
 
 type Builder struct {
@@ -31,10 +33,62 @@ func NewBuilder(r io.Reader, m *Manager, parent *Builder) *Builder {
 }
 
 func (b *Builder) Build() io.Reader {
-	return b.parseTemplateVariables(b.Reader)
+	r := b.parseTemplateVariables(b.Reader)
+	r = b.parseTemplateTags(r)
+	return r
 	// TODO - Tokenize through
 	// TODO - Replace variable tags
 	// TODO - Inject content(s)
+}
+
+func (b *Builder) parseTemplateTags(r io.Reader) io.Reader {
+	returnReader, writer := io.Pipe()
+	tok := html.NewTokenizer(r)
+	go func() {
+		defer writer.Close()
+		for {
+			tt := tok.Next()
+			if tt == html.ErrorToken {
+				return
+			}
+
+			b.parseToken(tok, writer)
+
+			// if err != nil {
+			// 	return returnReader, err
+			// }
+		}
+	}()
+
+	return returnReader
+}
+
+func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) {
+	raw := tok.Raw()
+	name, hasAttr := tok.TagName()
+
+	tagPrefix := b.Manager.TagPrefix
+	prefixLen := len(tagPrefix)
+
+	isTempTag := len(name) > prefixLen && bytes.Equal(name[0:prefixLen], tagPrefix)
+
+	// Write content if normal tag
+	if !isTempTag {
+		w.Write(raw)
+		return
+	}
+
+	// Parse tag attrs as vars
+	tagVars := make(map[string][]byte)
+	if hasAttr {
+		for {
+			key, val, hasMore := tok.TagAttr()
+			tagVars[string(key)] = val
+			if !hasMore {
+				break
+			}
+		}
+	}
 }
 
 func (b *Builder) parseTemplateVariables(r io.Reader) io.Reader {
