@@ -13,6 +13,8 @@ type Builder struct {
 	Manager *Manager
 	Vars    map[string][]byte
 	Content []byte
+
+	tagStack []*templateTag
 }
 
 func NewBuilder(r io.Reader, m *Manager, parent *Builder) *Builder {
@@ -24,19 +26,22 @@ func NewBuilder(r io.Reader, m *Manager, parent *Builder) *Builder {
 	// Create var store and copy over parent vars
 	b.Vars = make(map[string][]byte)
 	if parent != nil {
-		for k, v := range parent.Vars {
-			b.Vars[k] = v
-		}
+		b.mergeVars(parent.Vars)
 	}
 
 	return b
+}
+
+func (b *Builder) mergeVars(vars map[string][]byte) {
+	for k, v := range vars {
+		b.Vars[k] = v
+	}
 }
 
 func (b *Builder) Build() io.Reader {
 	r := b.parseTemplateVariables(b.Reader)
 	r = b.parseTemplateTags(r)
 	return r
-	// TODO - Tokenize through
 	// TODO - Replace variable tags
 	// TODO - Inject content(s)
 }
@@ -63,7 +68,8 @@ func (b *Builder) parseTemplateTags(r io.Reader) io.Reader {
 	return returnReader
 }
 
-func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) {
+func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) error {
+	var err error
 	raw := tok.Raw()
 	name, hasAttr := tok.TagName()
 
@@ -72,23 +78,83 @@ func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) {
 
 	isTempTag := len(name) > prefixLen && bytes.Equal(name[0:prefixLen], tagPrefix)
 
-	// Write content if normal tag
+	depth := len(b.tagStack)
+
+	// Write content if normal tag or add to content of last in stack
 	if !isTempTag {
-		w.Write(raw)
-		return
+		if depth > 0 {
+			b.tagStack[depth-1].content = append(b.tagStack[depth-1].content, raw...)
+		} else {
+			w.Write(raw)
+		}
+		return err
 	}
+
+	tagName := name[prefixLen:]
 
 	// Parse tag attrs as vars
 	tagVars := make(map[string][]byte)
 	if hasAttr {
 		for {
 			key, val, hasMore := tok.TagAttr()
-			tagVars[string(key)] = val
+			valCopy := make([]byte, len(val))
+			copy(valCopy, val)
+			tagVars[string(key)] = valCopy
 			if !hasMore {
 				break
 			}
 		}
 	}
+
+	token := tok.Token()
+
+	if token.Type == html.StartTagToken || token.Type == html.SelfClosingTagToken {
+		b.addTemplateTag(tagName, tagVars)
+	}
+
+	if token.Type == html.EndTagToken || token.Type == html.SelfClosingTagToken {
+		err = b.closeTemplateTag(w)
+	}
+
+	return err
+
+}
+
+func (b *Builder) addTemplateTag(tagName []byte, attrs map[string][]byte) *templateTag {
+	tag := NewTemplateTag(tagName, attrs)
+	b.tagStack = append(b.tagStack, tag)
+	return tag
+}
+
+// Closes the last template tag off and parses the content
+// into the next latest template tag or, if not mor tags exist,
+// adds the tag content to the output
+func (b *Builder) closeTemplateTag(writer io.Writer) (err error) {
+	var closingTag *templateTag
+
+	cDepth := len(b.tagStack)
+
+	if cDepth > 1 {
+		closingTag = b.tagStack[cDepth-1]
+	} else {
+		closingTag = b.tagStack[0]
+	}
+
+	content, err := closingTag.Parse(b)
+	if err != nil {
+		return err
+	}
+
+	if cDepth > 1 {
+		prevTag := b.tagStack[cDepth-2]
+		prevTag.content = append(prevTag.content, content...)
+	} else {
+		writer.Write(content)
+	}
+
+	// Drop the last tag in the tracker
+	b.tagStack = b.tagStack[:cDepth-1]
+	return err
 }
 
 func (b *Builder) parseTemplateVariables(r io.Reader) io.Reader {

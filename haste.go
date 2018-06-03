@@ -68,61 +68,6 @@ func main() {
 
 }
 
-func batchGenerate(input []string, rootPath string) {
-	if len(input) < 2 {
-		errOut("Batch mode requires specified input files and an output folder as the last parameter. For example:")
-		errOut("haste page1.html page2.html dist")
-	}
-
-	files := input[:len(input)-1]
-	fileCount := len(files)
-	dir := input[len(input)-1]
-	waitChan := make(chan bool)
-	outPath, err := filepath.Abs(filepath.Join("./", dir))
-	check(err)
-
-	for _, filePath := range files {
-		go func(filePath string) {
-			absInPath, err := filepath.Abs(filepath.Join("./", filePath))
-			check(err)
-			absOutPath, err := filepath.Abs(filepath.Join("./", dir, filePath))
-			check(err)
-
-			file, err := os.Open(absInPath)
-			defer file.Close()
-			check(err)
-
-			content, err := engine.Parse(file, filePath, rootPath)
-			check(err)
-
-			// Write file to ouput
-			outDir := filepath.Dir(absOutPath)
-			if _, fileErr := os.Stat(outDir); fileErr != nil {
-				if os.IsNotExist(err) {
-					os.MkdirAll(outDir, 0755)
-				} else {
-					check(err)
-				}
-			}
-			outFile, err := os.Create(absOutPath)
-			defer outFile.Close()
-			check(err)
-			outFile.WriteString(content)
-			outFile.Sync()
-			devlog(fmt.Sprintf("File from:\n%s\nparsed and written to:\n%s", absInPath, absOutPath))
-			waitChan <- true
-		}(filePath)
-	}
-
-	finCount := 0
-	for finCount < fileCount {
-		_ = <-waitChan
-		finCount++
-	}
-
-	color.Green("%d files successfully generated into folder %s", fileCount, outPath)
-}
-
 func startWatcher(path string, port int, livereload bool, depth int) {
 	manager := &managerServer{
 		WatchedPath: path,

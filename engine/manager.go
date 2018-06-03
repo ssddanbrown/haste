@@ -67,13 +67,17 @@ func (m *Manager) BuildFirst() {
 	bReader, _ := m.Build(file)
 	output, _ := ioutil.ReadAll(bReader)
 	fmt.Println(string(output))
+	// TODO
+}
+
+func (m *Manager) BuildAll() {
+	// TODO
 }
 
 func (m *Manager) Build(buildFile *BuildFile) (io.Reader, error) {
 	file, err := os.Open(buildFile.Path)
 	builder := NewBuilder(file, m, nil)
 	bReader := builder.Build()
-	fmt.Println(builder.Vars)
 	return bReader, err
 }
 

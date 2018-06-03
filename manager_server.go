@@ -13,7 +13,6 @@ import (
 
 	"github.com/GeertJohan/go.rice"
 	"github.com/howeyc/fsnotify"
-	"github.com/ssddanbrown/haste/engine"
 	"golang.org/x/net/websocket"
 )
 
@@ -97,17 +96,9 @@ func (m *managerServer) handleFileChange(changedFile string) {
 
 	if reload {
 		time.AfterFunc(100*time.Millisecond, func() {
-			in, err := ioutil.ReadFile(m.WatchedPath)
-			check(err)
-
-			r := strings.NewReader(string(in))
 
 			// TODO - To change dir used
-			newContent, err := engine.Parse(r, m.WatchedPath, filepath.Dir(m.WatchedPath))
-			if err != nil {
-				errlog(err)
-				return
-			}
+			newContent := ""
 
 			newFileName := getGenFileName(m.WatchedPath)
 			newFileLocation := filepath.Join(filepath.Dir(m.WatchedPath), "./"+newFileName)
