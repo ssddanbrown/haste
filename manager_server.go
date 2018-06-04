@@ -11,12 +11,15 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/ssddanbrown/haste/engine"
+
 	"github.com/GeertJohan/go.rice"
 	"github.com/howeyc/fsnotify"
 	"golang.org/x/net/websocket"
 )
 
-type managerServer struct {
+type Server struct {
+	Manager          *engine.Manager
 	WatchedFolders   []string
 	fileWatcher      *fsnotify.Watcher
 	changedFiles     chan string
@@ -29,25 +32,25 @@ type managerServer struct {
 	WatchDepth       int
 }
 
-func (m *managerServer) watchingFolder() bool {
+func (m *Server) watchingFolder() bool {
 	return filepath.Ext(m.WatchedPath) == ""
 }
 
-func (m *managerServer) addWatchedFolder(htmlFilePath string) {
+func (m *Server) addWatchedFolder(htmlFilePath string) {
 	rootPath := filepath.Dir(htmlFilePath)
 	err := m.watchFoldersToDepth(rootPath, m.WatchDepth)
 	check(err)
 	go m.handleFileChange(htmlFilePath)
 }
 
-func (m *managerServer) listen() error {
+func (m *Server) listen() error {
 	m.startFileWatcher()
 	handler := m.getManagerRouting()
 	http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", m.Port), handler)
 	return nil
 }
 
-func (m *managerServer) liveReloadAlertChange(file string) {
+func (m *Server) liveReloadAlertChange(file string) {
 	response := livereloadChange{
 		Command: "reload",
 		Path:    file,
@@ -66,7 +69,7 @@ func (m *managerServer) liveReloadAlertChange(file string) {
 	devlog("File changed: " + file)
 }
 
-func (m *managerServer) handleFileChange(changedFile string) {
+func (m *Server) handleFileChange(changedFile string) {
 
 	// Prevent duplicate changes
 	currentTime := time.Now().UnixNano()
@@ -75,11 +78,7 @@ func (m *managerServer) handleFileChange(changedFile string) {
 	}
 
 	// Ignore git directories
-	if strings.Contains(changedFile, ".git") {
-		return
-	}
-
-	if strings.Contains(changedFile, ".gen.html") {
+	if strings.Contains(changedFile, ".git/") {
 		return
 	}
 
@@ -92,23 +91,18 @@ func (m *managerServer) handleFileChange(changedFile string) {
 		}
 	}
 
-	// Add file to known root folders
-
 	if reload {
+		// Build and reload files
 		time.AfterFunc(100*time.Millisecond, func() {
 
-			// TODO - To change dir used
-			newContent := ""
+			outFiles := m.Manager.BuildAll()
+			// TODO - Prevent full rebuild
 
-			newFileName := getGenFileName(m.WatchedPath)
-			newFileLocation := filepath.Join(filepath.Dir(m.WatchedPath), "./"+newFileName)
-			newFile, err := os.Create(newFileLocation)
-			defer newFile.Close()
-			check(err)
-
-			newFile.WriteString(newContent)
-			newFile.Sync()
-			m.changedFiles <- newFileLocation
+			time.AfterFunc(100*time.Millisecond, func() {
+				for _, file := range outFiles {
+					m.changedFiles <- file
+				}
+			})
 		})
 
 	} else {
@@ -118,7 +112,7 @@ func (m *managerServer) handleFileChange(changedFile string) {
 	m.lastFileChange = currentTime
 }
 
-func (m *managerServer) startFileWatcher() error {
+func (m *Server) startFileWatcher() error {
 	watcher, err := fsnotify.NewWatcher()
 	check(err)
 
@@ -164,7 +158,7 @@ func (m *managerServer) startFileWatcher() error {
 	return nil
 }
 
-func (m *managerServer) watchFoldersToDepth(folderPath string, depth int) error {
+func (m *Server) watchFoldersToDepth(folderPath string, depth int) error {
 
 	ignoreFolders := []string{"node_modules", ".git"}
 
@@ -187,7 +181,7 @@ func (m *managerServer) watchFoldersToDepth(folderPath string, depth int) error 
 
 	return nil
 }
-func (m *managerServer) watchFolder(folderPath string) error {
+func (m *Server) watchFolder(folderPath string) error {
 	if !stringInSlice(folderPath, m.WatchedFolders) {
 		m.WatchedFolders = append(m.WatchedFolders, folderPath)
 		if m.fileWatcher == nil {
@@ -202,34 +196,39 @@ func (m *managerServer) watchFolder(folderPath string) error {
 	return nil
 }
 
-func (manager *managerServer) getManagerRouting() *http.ServeMux {
+func (s *Server) getManagerRouting() *http.ServeMux {
 
 	handler := http.NewServeMux()
 	customServeMux := http.NewServeMux()
 
-	customServeMux.Handle("/", http.FileServer(http.Dir(filepath.Dir(manager.WatchedPath))))
+	customServeMux.Handle("/", http.FileServer(http.Dir(s.Manager.OutDir)))
 
 	// Get our generated HTML file
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 
-		if r.URL.Path != "/" {
-			fmt.Println(r.URL.Path)
-			customServeMux.ServeHTTP(w, r)
-		} else {
+		htmlPath := filepath.Join(s.Manager.OutDir, r.URL.Path)
+		if filepath.Ext(htmlPath) == "" {
+			htmlPath += "/index.html"
+		}
 
-			file, err := os.Open(getGenFileName(manager.WatchedPath))
+		if fileExists(htmlPath) {
+			fmt.Println(htmlPath, fileExists(htmlPath))
+			file, err := os.Open(htmlPath)
 			check(err)
 			w.Header().Add("Cache-Control", "no-cache")
 			w.Header().Add("Content-Type", "text/html")
 			io.Copy(w, file)
-			if manager.LiveReload {
+			if s.LiveReload {
 				fmt.Fprintln(w, "\n<script src=\"/livereload.js\"></script>")
 			}
+		} else {
+			fmt.Println(r.URL.Path)
+			customServeMux.ServeHTTP(w, r)
 		}
 
 	})
 
-	if !manager.LiveReload {
+	if !s.LiveReload {
 		return handler
 	}
 
@@ -244,14 +243,19 @@ func (manager *managerServer) getManagerRouting() *http.ServeMux {
 		if err != nil {
 			check(err)
 		}
-		templS.Execute(w, manager.Port)
+		templS.Execute(w, s.Port)
 	})
 
 	// Websocket handling
-	wsHandler := manager.getLivereloadWsHandler()
+	wsHandler := s.getLivereloadWsHandler()
 	handler.Handle("/livereload", websocket.Handler(wsHandler))
 
 	return handler
+}
+
+func fileExists(file string) bool {
+	_, err := os.Stat(file)
+	return !os.IsNotExist(err)
 }
 
 type livereloadResponse struct {
@@ -270,7 +274,7 @@ type livereloadChange struct {
 	LiveCSS bool   `json:"liveCSS"`
 }
 
-func (manager *managerServer) getLivereloadWsHandler() func(ws *websocket.Conn) {
+func (manager *Server) getLivereloadWsHandler() func(ws *websocket.Conn) {
 	return func(ws *websocket.Conn) {
 
 		manager.sockets = append(manager.sockets, ws)

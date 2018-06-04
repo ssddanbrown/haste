@@ -3,9 +3,9 @@ package engine
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // A Manager keeps control over builds and keeps track of what files are in build
@@ -62,16 +62,43 @@ func (m *Manager) LoadPath(path string) error {
 	return err
 }
 
-func (m *Manager) BuildFirst() {
-	file := m.BuildFiles[0]
-	bReader, _ := m.Build(file)
-	output, _ := ioutil.ReadAll(bReader)
-	fmt.Println(string(output))
-	// TODO
+func (m *Manager) BuildAll() []string {
+
+	outPaths := []string{}
+
+	for _, bf := range m.BuildFiles {
+		outPath, err := m.BuildToFile(bf)
+		outPaths = append(outPaths, outPath)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	return outPaths
 }
 
-func (m *Manager) BuildAll() {
-	// TODO
+func (m *Manager) BuildToFile(b *BuildFile) (string, error) {
+	relPath, err := filepath.Rel(m.WorkingDir, b.Path)
+	if err != nil {
+		return "", err
+	}
+
+	outPath := strings.TrimSuffix(relPath, ".haste.html") + ".html"
+	outPath = filepath.Join(m.OutDir, outPath)
+	outPathDir := filepath.Dir(outPath)
+	err = os.MkdirAll(outPathDir, os.ModePerm)
+	if err != nil {
+		return outPath, err
+	}
+
+	reader, err := m.Build(b)
+	file, err := os.Create(outPath)
+	if err != nil {
+		return outPath, err
+	}
+
+	io.Copy(file, reader)
+	return outPath, err
 }
 
 func (m *Manager) Build(buildFile *BuildFile) (io.Reader, error) {
@@ -94,7 +121,8 @@ func (m *Manager) addBuildFile(path string) {
 func (m *Manager) scanNewBuildFiles(root string) ([]string, error) {
 	fileList := []string{}
 	err := filepath.Walk(root, func(path string, f os.FileInfo, err error) error {
-		if match, err := filepath.Match(m.Glob, f.Name()); match && err != nil {
+		match, err := filepath.Match(m.Glob, f.Name())
+		if match && err == nil {
 			fileList = append(fileList, path)
 		}
 		return nil

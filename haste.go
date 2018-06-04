@@ -17,63 +17,64 @@ var isVerbose bool
 
 func main() {
 
-	// watch := flag.Bool("w", false, "Watch HTML file and auto-compile")
-	// port := flag.Int("p", 8081, "Provide a port to listen on")
-	// liveReload := flag.Bool("l", false, "Enable livereload (When watching only)")
+	watch := flag.Bool("w", false, "Watch HTML file and auto-compile")
+	port := flag.Int("p", 8088, "Provide a port to listen on")
+	disableLiveReload := flag.Bool("l", false, "Disable livereload (When watching only)")
+
 	verbose := flag.Bool("v", false, "Enable verbose ouput")
 	distPtr := flag.String("d", "./dist/", "Output folder for generated content")
 	rootPathPtr := flag.String("r", "./", "The root relative directory build path for template location")
 
 	flag.Parse()
+	args := flag.Args()
 	isVerbose = *verbose
 
 	wd, err := os.Getwd()
 	rootPath, err := filepath.Abs(filepath.Join(wd, *rootPathPtr))
+
+	// If provided with directory use that as root build path
+	if len(args) == 1 && *rootPathPtr == "./" {
+		stat, err := os.Stat(args[0])
+		if err == nil && stat.IsDir() {
+			rootPath, err = filepath.Abs(filepath.Join(wd, args[0]))
+		}
+	}
+
+	// Set output path
 	distPath, err := filepath.Abs(filepath.Join(wd, *distPtr))
 	check(err)
 
+	// Create a new manager
 	manager := engine.NewManager(rootPath, distPath)
 
-	if len(flag.Args()) > 0 {
-		for _, inputPath := range flag.Args() {
-			err = manager.LoadPath(inputPath)
+	// Load in files from args or build from working directory
+	if len(args) > 0 {
+		for _, inputPath := range args {
+			absPath := filepath.Join(wd, inputPath)
+			err = manager.LoadPath(absPath)
 		}
 	} else {
 		err = manager.LoadPath(wd)
 	}
-
-	manager.BuildFirst()
-
 	check(err)
 
-	// Print to stdout if not watching
-	// if !*watch {
-	// 	givenFile, err := os.Open(readFilePath)
-	// 	defer givenFile.Close()
-	// 	check(err)
-	// 	o, err := engine.Parse(givenFile, readFilePath, rootPath)
-	// 	check(err)
-	// 	fmt.Println(o)
-	// 	return
-	// }
+	// Build all found files
+	manager.BuildAll()
 
-	// if *batchMode {
-	// 	batchGenerate(flag.Args(), rootPath)
-	// }
-
-	// // Watch if specified
-	// if *watch {
-	// 	startWatcher(readFilePath, *port, *liveReload, *watchDepth)
-	// }
+	// Watch if specified
+	if *watch {
+		startWatcher(manager, *port, !*disableLiveReload)
+	}
 
 }
 
-func startWatcher(path string, port int, livereload bool, depth int) {
-	manager := &managerServer{
-		WatchedPath: path,
+func startWatcher(m *engine.Manager, port int, livereload bool) {
+	manager := &Server{
+		Manager:     m,
+		WatchedPath: m.WorkingDir,
 		Port:        port,
 		LiveReload:  livereload,
-		WatchDepth:  depth,
+		WatchDepth:  5,
 	}
 
 	portFree := checkPortFree(manager.Port)
@@ -82,7 +83,7 @@ func startWatcher(path string, port int, livereload bool, depth int) {
 		return
 	}
 
-	manager.addWatchedFolder(path)
+	manager.addWatchedFolder(m.WorkingDir)
 
 	color.Green(fmt.Sprintf("Server started at http://localhost:%d", manager.Port))
 	openWebPage(fmt.Sprintf("http://localhost:%d/", manager.Port))
@@ -144,13 +145,6 @@ func intInSlice(integer int, list []int) bool {
 		}
 	}
 	return false
-}
-
-func getGenFileName(originalName string) string {
-	fileName := filepath.Base(originalName)
-	fileExt := filepath.Ext(originalName)
-	fileBaseName := fileName[:len(fileName)-len(fileExt)]
-	return fileBaseName + ".gen" + fileExt
 }
 
 func checkPortFree(port int) bool {
