@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,9 +10,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/ssddanbrown/haste/engine"
+	"github.com/ssddanbrown/haste/server"
 )
-
-var isVerbose bool
 
 func main() {
 
@@ -21,13 +19,12 @@ func main() {
 	port := flag.Int("p", 8088, "Provide a port to listen on")
 	disableLiveReload := flag.Bool("l", false, "Disable livereload (When watching only)")
 
-	verbose := flag.Bool("v", false, "Enable verbose ouput")
+	//verbose := flag.Bool("v", false, "Enable verbose output")
 	distPtr := flag.String("d", "./dist/", "Output folder for generated content")
 	rootPathPtr := flag.String("r", "./", "The root relative directory build path for template location")
 
 	flag.Parse()
 	args := flag.Args()
-	isVerbose = *verbose
 
 	wd, err := os.Getwd()
 	rootPath, err := filepath.Abs(filepath.Join(wd, *rootPathPtr))
@@ -69,26 +66,14 @@ func main() {
 }
 
 func startWatcher(m *engine.Manager, port int, livereload bool) {
-	manager := &Server{
-		Manager:     m,
-		WatchedPath: m.WorkingDir,
-		Port:        port,
-		LiveReload:  livereload,
-		WatchDepth:  5,
-	}
+	ser := server.NewServer(m, port, livereload)
+	ser.AddWatchedFolder(m.WorkingDir)
 
-	portFree := checkPortFree(manager.Port)
-	if !portFree {
-		fmt.Printf("Listen port %d not available, Are you already running haste?\n", manager.Port)
-		return
-	}
+	color.Green(fmt.Sprintf("Server started at http://localhost:%d", ser.Port))
+	// TODO -> Open option? Annoying by default
+	// openWebPage(fmt.Sprintf("http://localhost:%d/", ser.Port))
 
-	manager.addWatchedFolder(m.WorkingDir)
-
-	color.Green(fmt.Sprintf("Server started at http://localhost:%d", manager.Port))
-	openWebPage(fmt.Sprintf("http://localhost:%d/", manager.Port))
-
-	err := manager.listen()
+	err := ser.Listen()
 	check(err)
 }
 
@@ -111,49 +96,4 @@ func check(err error) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func devlog(s string) {
-	if isVerbose {
-		color.Blue(s)
-	}
-}
-
-func errlog(err error) {
-	if err != nil {
-		color.Red(err.Error())
-	}
-}
-
-func errOut(m string) {
-	color.Red(m)
-}
-
-func stringInSlice(str string, list []string) bool {
-	for _, v := range list {
-		if v == str {
-			return true
-		}
-	}
-	return false
-}
-
-func intInSlice(integer int, list []int) bool {
-	for _, v := range list {
-		if v == integer {
-			return true
-		}
-	}
-	return false
-}
-
-func checkPortFree(port int) bool {
-
-	conn, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
-	if err != nil {
-		return false
-	}
-
-	conn.Close()
-	return true
 }

@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"fmt"
@@ -13,9 +13,12 @@ import (
 
 	"github.com/ssddanbrown/haste/engine"
 
+	"github.com/fatih/color"
 	"github.com/GeertJohan/go.rice"
 	"github.com/howeyc/fsnotify"
 	"golang.org/x/net/websocket"
+	"net"
+	"errors"
 )
 
 type Server struct {
@@ -24,7 +27,7 @@ type Server struct {
 	fileWatcher      *fsnotify.Watcher
 	changedFiles     chan string
 	sockets          []*websocket.Conn
-	lastFileChange   int64
+	lastFileChanges  map[string]int64
 	Port             int
 	WatchedPath      string
 	WatchedRootFiles []string
@@ -32,50 +35,81 @@ type Server struct {
 	WatchDepth       int
 }
 
-func (m *Server) watchingFolder() bool {
-	return filepath.Ext(m.WatchedPath) == ""
+func NewServer(manager *engine.Manager, port int, livereload bool) *Server {
+	s := &Server{
+		Manager:     manager,
+		WatchedPath: manager.WorkingDir,
+		Port:        port,
+		LiveReload:  livereload,
+		WatchDepth:  5,
+		lastFileChanges: make(map[string]int64),
+	}
+
+	portFree := checkPortFree(s.Port)
+	if !portFree {
+		check(errors.New(fmt.Sprintf("Listen port %d not available, Are you already running haste?\n", s.Port)))
+		return s
+	}
+
+	return s
 }
 
-func (m *Server) addWatchedFolder(htmlFilePath string) {
-	rootPath := filepath.Dir(htmlFilePath)
-	err := m.watchFoldersToDepth(rootPath, m.WatchDepth)
+func (s *Server) watchingFolder() bool {
+	return filepath.Ext(s.WatchedPath) == ""
+}
+
+func (s *Server) AddWatchedFolder(folder string) {
+	devlog("AddWatchedFolder:" + folder)
+	err := s.watchFoldersToDepth(folder, s.WatchDepth)
 	check(err)
-	go m.handleFileChange(htmlFilePath)
+	go s.handleFileChange(folder)
 }
 
-func (m *Server) listen() error {
-	m.startFileWatcher()
-	handler := m.getManagerRouting()
-	http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", m.Port), handler)
+func (s *Server) Listen() error {
+	s.startFileWatcher()
+	handler := s.getManagerRouting()
+	http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", s.Port), handler)
 	return nil
 }
 
-func (m *Server) liveReloadAlertChange(file string) {
+func (s *Server) liveReloadAlertChange(file string) {
 	response := livereloadChange{
 		Command: "reload",
 		Path:    file,
 		LiveCSS: true,
 	}
-	for i := 0; i < len(m.sockets); i++ {
-		if !m.sockets[i].IsServerConn() {
-			m.sockets[i].Close()
+	for i := 0; i < len(s.sockets); i++ {
+		if !s.sockets[i].IsServerConn() {
+			s.sockets[i].Close()
 		}
 
-		if m.sockets[i].IsServerConn() {
-			websocket.JSON.Send(m.sockets[i], response)
+		if s.sockets[i].IsServerConn() {
+			websocket.JSON.Send(s.sockets[i], response)
 		}
 	}
 
 	devlog("File changed: " + file)
 }
 
-func (m *Server) handleFileChange(changedFile string) {
+func (s *Server) getLastFileChange(changedFile string) int64 {
+	lastChange, ok := s.lastFileChanges[changedFile]
+	if !ok {
+		return 0
+	}
+	return lastChange
+}
+
+func (s *Server) handleFileChange(changedFile string) {
+
+	devlog("handleFileChange" + changedFile)
 
 	// Prevent duplicate changes
 	currentTime := time.Now().UnixNano()
-	if (currentTime-m.lastFileChange)/1000000 < 100 {
+	if (currentTime-s.getLastFileChange(changedFile))/1000000 < 100 {
 		return
 	}
+
+	devlog("PAST TIME" + changedFile)
 
 	// Ignore git directories
 	if strings.Contains(changedFile, ".git/") {
@@ -85,39 +119,42 @@ func (m *Server) handleFileChange(changedFile string) {
 	// Check if a relevant extension
 	watchedExtensions := []string{".html", ".css", ".js"}
 	reload := false
-	for i := range watchedExtensions {
-		if filepath.Ext(changedFile) == watchedExtensions[i] {
+	for _, ext := range watchedExtensions {
+		if filepath.Ext(changedFile) == ext {
 			reload = true
 		}
 	}
 
-	if reload {
-		// Build and reload files
-		time.AfterFunc(100*time.Millisecond, func() {
+	s.lastFileChanges[changedFile] = currentTime
 
-			outFiles := m.Manager.BuildAll()
-			// TODO - Prevent full rebuild
-
-			time.AfterFunc(100*time.Millisecond, func() {
-				for _, file := range outFiles {
-					m.changedFiles <- file
-				}
-			})
-		})
-
-	} else {
-		m.changedFiles <- changedFile
+	if !reload {
+		s.changedFiles <- changedFile
+		return
 	}
 
-	m.lastFileChange = currentTime
+	devlog("will build" + changedFile)
+
+	// Build and reload files
+	time.AfterFunc(100*time.Millisecond, func() {
+
+		outFiles := s.Manager.BuildAll()
+		// TODO - Prevent full rebuild
+
+		time.AfterFunc(100*time.Millisecond, func() {
+			for _, file := range outFiles {
+				s.changedFiles <- file
+			}
+		})
+	})
+
 }
 
-func (m *Server) startFileWatcher() error {
+func (s *Server) startFileWatcher() error {
 	watcher, err := fsnotify.NewWatcher()
 	check(err)
 
-	m.fileWatcher = watcher
-	m.changedFiles = make(chan string)
+	s.fileWatcher = watcher
+	s.changedFiles = make(chan string)
 
 	// Process events
 	go func() {
@@ -128,7 +165,7 @@ func (m *Server) startFileWatcher() error {
 			select {
 			case ev := <-watcher.Event:
 				if ev.IsModify() {
-					m.handleFileChange(ev.Name)
+					s.handleFileChange(ev.Name)
 				}
 			case err := <-watcher.Error:
 				devlog("File Watcher Error: " + err.Error())
@@ -141,16 +178,16 @@ func (m *Server) startFileWatcher() error {
 		watcher.Close()
 	}()
 
-	for i := 0; i < len(m.WatchedFolders); i++ {
-		err = watcher.Watch(m.WatchedFolders[i])
-		devlog("Adding file watcher to " + m.WatchedFolders[i])
+	for i := 0; i < len(s.WatchedFolders); i++ {
+		err = watcher.Watch(s.WatchedFolders[i])
+		devlog("Adding file watcher to " + s.WatchedFolders[i])
 		check(err)
 	}
 
 	go func() {
-		for f := range m.changedFiles {
-			if len(m.sockets) > 0 {
-				m.liveReloadAlertChange(f)
+		for f := range s.changedFiles {
+			if len(s.sockets) > 0 {
+				s.liveReloadAlertChange(f)
 			}
 		}
 	}()
@@ -158,11 +195,11 @@ func (m *Server) startFileWatcher() error {
 	return nil
 }
 
-func (m *Server) watchFoldersToDepth(folderPath string, depth int) error {
+func (s *Server) watchFoldersToDepth(folderPath string, depth int) error {
 
 	ignoreFolders := []string{"node_modules", ".git"}
 
-	m.watchFolder(folderPath)
+	s.watchFolder(folderPath)
 	if depth == 0 {
 		return nil
 	}
@@ -175,19 +212,19 @@ func (m *Server) watchFoldersToDepth(folderPath string, depth int) error {
 	for _, f := range folderItems {
 		if f.IsDir() && !stringInSlice(f.Name(), ignoreFolders) {
 			newFPath := filepath.Join(folderPath, f.Name())
-			m.watchFoldersToDepth(newFPath, depth-1)
+			s.watchFoldersToDepth(newFPath, depth-1)
 		}
 	}
 
 	return nil
 }
-func (m *Server) watchFolder(folderPath string) error {
-	if !stringInSlice(folderPath, m.WatchedFolders) {
-		m.WatchedFolders = append(m.WatchedFolders, folderPath)
-		if m.fileWatcher == nil {
+func (s *Server) watchFolder(folderPath string) error {
+	if !stringInSlice(folderPath, s.WatchedFolders) {
+		s.WatchedFolders = append(s.WatchedFolders, folderPath)
+		if s.fileWatcher == nil {
 			return nil
 		}
-		err := m.fileWatcher.Watch(folderPath)
+		err := s.fileWatcher.Watch(folderPath)
 		devlog("Adding file watcher to " + folderPath)
 		if err != nil {
 			return err
@@ -274,10 +311,10 @@ type livereloadChange struct {
 	LiveCSS bool   `json:"liveCSS"`
 }
 
-func (manager *Server) getLivereloadWsHandler() func(ws *websocket.Conn) {
+func (s *Server) getLivereloadWsHandler() func(ws *websocket.Conn) {
 	return func(ws *websocket.Conn) {
 
-		manager.sockets = append(manager.sockets, ws)
+		s.sockets = append(s.sockets, ws)
 
 		for {
 			// websocket.Message.Send(ws, "Hello, Client!")
@@ -310,4 +347,37 @@ func (manager *Server) getLivereloadWsHandler() func(ws *websocket.Conn) {
 
 	}
 
+}
+
+
+func devlog(s string) {
+	if true {
+		color.Blue(s)
+	}
+}
+
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func stringInSlice(str string, list []string) bool {
+	for _, v := range list {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
+func checkPortFree(port int) bool {
+
+	conn, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
+	if err != nil {
+		return false
+	}
+
+	conn.Close()
+	return true
 }
