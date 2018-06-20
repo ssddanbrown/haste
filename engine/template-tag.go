@@ -85,6 +85,12 @@ func (t *templateTag) Parse(b *Builder) ([]byte, error) {
 	// Generate content
 	tagBuilder := NewBuilder(tagReader, b.Manager, b)
 	contentReader := tagBuilder.Build()
+
+	// Clean and parse inner content before merging tags
+	// Prevents attr vars leaking into scope of the content
+	innerContent := bytes.Trim(t.content, "\n\r ")
+	innerContent = parseVariableTags(b.Manager, innerContent, tagBuilder.Vars)
+
 	tagBuilder.mergeVars(t.attrs)
 
 	// Read content and wrap if style or script
@@ -99,23 +105,22 @@ func (t *templateTag) Parse(b *Builder) ([]byte, error) {
 	}
 
 	// Read content tags
-	innerContent := bytes.Trim(t.content, "\n\r ")
 	content = bytes.Replace(content, []byte("@content"), innerContent, -1)
-	content = parseVariableTags(content, tagBuilder.Vars)
+	content = parseVariableTags(b.Manager, content, tagBuilder.Vars)
 	return content, err
 }
 
-func parseVariableTags(content []byte, vars map[string][]byte) []byte {
+func parseVariableTags(manager *Manager, content []byte, vars map[string][]byte) []byte {
 	inTag := false
 	tagStart := 0
 	tagEnd := -1
 
 	var newContent []byte
 
-	startTag := []byte("{{{")
 	escChar := byte('@')
+	startTag := manager.varTagOpen
 	startTagLen := len(startTag)
-	endTag := []byte("}}}")
+	endTag := manager.varTagClose
 	endTagLen := len(endTag)
 
 	contentLen := len(content)
@@ -147,7 +152,7 @@ func parseVariableTags(content []byte, vars map[string][]byte) []byte {
 		}
 	}
 
-	// Add any remaning content if a new tag was being tracked
+	// Add any remaining content if a new tag was being tracked
 	if inTag {
 		newContent = append(newContent, content[tagStart:]...)
 	}

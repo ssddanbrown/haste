@@ -1,9 +1,10 @@
 package engine
 
 type BuildFile struct {
-	Path string
+	path string
+	includes []string
 }
 
 func NewBuildFile(path string) *BuildFile {
-	return &BuildFile{Path: path}
+	return &BuildFile{path: path}
 }

@@ -101,15 +101,11 @@ func (s *Server) getLastFileChange(changedFile string) int64 {
 
 func (s *Server) handleFileChange(changedFile string) {
 
-	devlog("handleFileChange" + changedFile)
-
 	// Prevent duplicate changes
 	currentTime := time.Now().UnixNano()
 	if (currentTime-s.getLastFileChange(changedFile))/1000000 < 100 {
 		return
 	}
-
-	devlog("PAST TIME" + changedFile)
 
 	// Ignore git directories
 	if strings.Contains(changedFile, ".git/") {

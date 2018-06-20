@@ -14,14 +14,13 @@ type Manager struct {
 	WorkingDir     string
 	OutDir         string
 	BuildFiles     []*BuildFile
-	BuildFilePaths map[string]bool
+	buildFilePaths map[string]bool
 
-	DependMap   map[string][]*BuildFile
-	Glob        string
-	GlobDepth   int
-	TagPrefix   []byte
-	VarTagOpen  []byte
-	VarTagClose []byte
+	glob        string
+	globDepth   int
+	tagPrefix   []byte
+	varTagOpen  []byte
+	varTagClose []byte
 }
 
 // NewManager creates and initializes a new Manager with a set of defaults
@@ -29,13 +28,12 @@ func NewManager(workingDir string, outDir string) *Manager {
 	m := &Manager{
 		WorkingDir:     workingDir,
 		OutDir:         outDir,
-		DependMap:      make(map[string][]*BuildFile, 0),
-		BuildFilePaths: make(map[string]bool),
-		Glob:           "*.haste.html",
-		GlobDepth:      5,
-		TagPrefix:      []byte("t:"),
-		VarTagOpen:     []byte("{{{"),
-		VarTagClose:    []byte("}}}"),
+		buildFilePaths: make(map[string]bool),
+		glob:           "*.haste.html",
+		globDepth:      5,
+		tagPrefix:      []byte("t:"),
+		varTagOpen:     []byte("{{"),
+		varTagClose:    []byte("}}"),
 	}
 	return m
 }
@@ -64,7 +62,7 @@ func (m *Manager) LoadPath(path string) error {
 
 func (m *Manager) BuildAll() []string {
 
-	outPaths := []string{}
+	var outPaths []string
 
 	for _, bf := range m.BuildFiles {
 		outPath, err := m.BuildToFile(bf)
@@ -78,7 +76,7 @@ func (m *Manager) BuildAll() []string {
 }
 
 func (m *Manager) BuildToFile(b *BuildFile) (string, error) {
-	relPath, err := filepath.Rel(m.WorkingDir, b.Path)
+	relPath, err := filepath.Rel(m.WorkingDir, b.path)
 	if err != nil {
 		return "", err
 	}
@@ -102,26 +100,26 @@ func (m *Manager) BuildToFile(b *BuildFile) (string, error) {
 }
 
 func (m *Manager) Build(buildFile *BuildFile) (io.Reader, error) {
-	file, err := os.Open(buildFile.Path)
+	file, err := os.Open(buildFile.path)
 	builder := NewBuilder(file, m, nil)
 	bReader := builder.Build()
 	return bReader, err
 }
 
 func (m *Manager) addBuildFile(path string) {
-	if _, ok := m.BuildFilePaths[path]; ok {
+	if _, ok := m.buildFilePaths[path]; ok {
 		return
 	}
 
 	newBuild := NewBuildFile(path)
-	m.BuildFilePaths[newBuild.Path] = true
+	m.buildFilePaths[newBuild.path] = true
 	m.BuildFiles = append(m.BuildFiles, newBuild)
 }
 
 func (m *Manager) scanNewBuildFiles(root string) ([]string, error) {
 	fileList := []string{}
 	err := filepath.Walk(root, func(path string, f os.FileInfo, err error) error {
-		match, err := filepath.Match(m.Glob, f.Name())
+		match, err := filepath.Match(m.glob, f.Name())
 		if match && err == nil {
 			fileList = append(fileList, path)
 		}

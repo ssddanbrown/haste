@@ -42,8 +42,6 @@ func (b *Builder) Build() io.Reader {
 	r := b.parseTemplateVariables(b.Reader)
 	r = b.parseTemplateTags(r)
 	return r
-	// TODO - Replace variable tags
-	// TODO - Inject content(s)
 }
 
 func (b *Builder) parseTemplateTags(r io.Reader) io.Reader {
@@ -58,10 +56,6 @@ func (b *Builder) parseTemplateTags(r io.Reader) io.Reader {
 			}
 
 			b.parseToken(tok, writer)
-
-			// if err != nil {
-			// 	return returnReader, err
-			// }
 		}
 	}()
 
@@ -73,7 +67,7 @@ func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) error {
 	raw := tok.Raw()
 	name, hasAttr := tok.TagName()
 
-	tagPrefix := b.Manager.TagPrefix
+	tagPrefix := b.Manager.tagPrefix
 	prefixLen := len(tagPrefix)
 
 	isTempTag := len(name) > prefixLen && bytes.Equal(name[0:prefixLen], tagPrefix)
