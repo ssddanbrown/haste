@@ -131,12 +131,11 @@ func (s *Server) handleFileChange(changedFile string) {
 	devlog("will build" + changedFile)
 
 	// Build and reload files
-	time.AfterFunc(100*time.Millisecond, func() {
+	time.AfterFunc(100 * time.Millisecond, func() {
 
-		outFiles := s.Manager.BuildAll()
-		// TODO - Prevent full rebuild
+		outFiles := s.Manager.NotifyChange(changedFile)
 
-		time.AfterFunc(100*time.Millisecond, func() {
+		time.AfterFunc(100 * time.Millisecond, func() {
 			for _, file := range outFiles {
 				s.changedFiles <- file
 			}
@@ -245,7 +244,6 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 		}
 
 		if fileExists(htmlPath) {
-			fmt.Println(htmlPath, fileExists(htmlPath))
 			file, err := os.Open(htmlPath)
 			check(err)
 			w.Header().Add("Cache-Control", "no-cache")

@@ -17,6 +17,7 @@ type templateTag struct {
 	content     []byte
 	contentType string
 
+	path string
 	attrs map[string][]byte
 }
 
@@ -42,6 +43,7 @@ func (t *templateTag) getReader(manager *Manager) (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+	t.path = tagPath
 	return os.Open(tagPath)
 }
 

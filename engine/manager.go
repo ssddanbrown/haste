@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"path"
 )
 
 // A Manager keeps control over builds and keeps track of what files are in build
@@ -13,9 +14,8 @@ import (
 type Manager struct {
 	WorkingDir     string
 	OutDir         string
-	BuildFiles     []*BuildFile
-	buildFilePaths map[string]bool
 
+	buildFiles  map[string]*BuildFile
 	glob        string
 	globDepth   int
 	tagPrefix   []byte
@@ -28,7 +28,7 @@ func NewManager(workingDir string, outDir string) *Manager {
 	m := &Manager{
 		WorkingDir:     workingDir,
 		OutDir:         outDir,
-		buildFilePaths: make(map[string]bool),
+		buildFiles: make(map[string]*BuildFile),
 		glob:           "*.haste.html",
 		globDepth:      5,
 		tagPrefix:      []byte("t:"),
@@ -64,7 +64,7 @@ func (m *Manager) BuildAll() []string {
 
 	var outPaths []string
 
-	for _, bf := range m.BuildFiles {
+	for _, bf := range m.buildFiles {
 		outPath, err := m.BuildToFile(bf)
 		outPaths = append(outPaths, outPath)
 		if err != nil {
@@ -99,25 +99,55 @@ func (m *Manager) BuildToFile(b *BuildFile) (string, error) {
 	return outPath, err
 }
 
+func (m *Manager) NotifyChange(file string) []string {
+	var outPaths []string
+
+	// If a BuildFile rebuild and exit
+	match, err := filepath.Match(m.glob, path.Base(file));
+	if match && err == nil {
+		bf := m.addBuildFile(file)
+		outPath, err := m.BuildToFile(bf)
+		outPaths = append(outPaths, outPath)
+		if err != nil {
+			fmt.Println(err)
+		}
+		return outPaths
+	}
+
+	// Rebuild any BuildFiles that depend on this file
+	for _, bf := range m.buildFiles {
+		if _, ok := bf.includes[file]; ok {
+			outPath, err := m.BuildToFile(bf)
+			outPaths = append(outPaths, outPath)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+	}
+	return outPaths
+}
+
 func (m *Manager) Build(buildFile *BuildFile) (io.Reader, error) {
+	fmt.Println("Building:", buildFile.path)
 	file, err := os.Open(buildFile.path)
 	builder := NewBuilder(file, m, nil)
 	bReader := builder.Build()
+	buildFile.includes = builder.FilesParsed
 	return bReader, err
 }
 
-func (m *Manager) addBuildFile(path string) {
-	if _, ok := m.buildFilePaths[path]; ok {
-		return
+func (m *Manager) addBuildFile(path string) *BuildFile {
+	if bf, ok := m.buildFiles[path]; ok {
+		return bf
 	}
 
 	newBuild := NewBuildFile(path)
-	m.buildFilePaths[newBuild.path] = true
-	m.BuildFiles = append(m.BuildFiles, newBuild)
+	m.buildFiles[newBuild.path] = newBuild
+	return newBuild
 }
 
 func (m *Manager) scanNewBuildFiles(root string) ([]string, error) {
-	fileList := []string{}
+	var fileList []string
 	err := filepath.Walk(root, func(path string, f os.FileInfo, err error) error {
 		match, err := filepath.Match(m.glob, f.Name())
 		if match && err == nil {

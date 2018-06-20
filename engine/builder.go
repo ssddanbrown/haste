@@ -13,6 +13,7 @@ type Builder struct {
 	Manager *Manager
 	Vars    map[string][]byte
 	Content []byte
+	FilesParsed map[string]bool
 
 	tagStack []*templateTag
 }
@@ -27,6 +28,9 @@ func NewBuilder(r io.Reader, m *Manager, parent *Builder) *Builder {
 	b.Vars = make(map[string][]byte)
 	if parent != nil {
 		b.mergeVars(parent.Vars)
+		b.FilesParsed = parent.FilesParsed
+	} else {
+		b.FilesParsed = make(map[string]bool)
 	}
 
 	return b
@@ -137,6 +141,10 @@ func (b *Builder) closeTemplateTag(writer io.Writer) (err error) {
 	content, err := closingTag.Parse(b)
 	if err != nil {
 		return err
+	}
+
+	if closingTag.path != "" {
+		b.FilesParsed[closingTag.path] = true
 	}
 
 	if cDepth > 1 {
