@@ -15,14 +15,15 @@ type templateTag struct {
 	name        []byte
 	content     []byte
 	contentType string
-	tagType string
-	path  string
-	attrs map[string][]byte
+	tagType     string
+	path        string
+	attrs       map[string][]byte
+	varContent  map[string][]byte
 }
 
 func NewVariableTag(name []byte) *templateTag {
 	tag := &templateTag{
-		name: make([]byte, len(name)),
+		name:    make([]byte, len(name)),
 		tagType: "variable",
 	}
 	copy(tag.name, name)
@@ -31,8 +32,8 @@ func NewVariableTag(name []byte) *templateTag {
 
 func NewTemplateTag(name []byte, attrs map[string][]byte) *templateTag {
 	tag := &templateTag{
-		name:  make([]byte, len(name)),
-		attrs: attrs,
+		name:    make([]byte, len(name)),
+		attrs:   attrs,
 		tagType: "template",
 	}
 	copy(tag.name, name)

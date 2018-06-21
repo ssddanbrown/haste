@@ -6,6 +6,8 @@ import (
 	"io"
 
 	"golang.org/x/net/html"
+	"errors"
+	"github.com/fatih/color"
 )
 
 type Builder struct {
@@ -59,7 +61,10 @@ func (b *Builder) parseTemplateTags(r io.Reader) io.Reader {
 				return
 			}
 
-			b.parseToken(tok, writer)
+			err := b.parseToken(tok, writer)
+			if err != nil {
+				color.Red("%s", err)
+			}
 		}
 	}()
 
@@ -124,9 +129,20 @@ func (b *Builder) closeVariableTag() error {
 	var closingTag *templateTag
 
 	cDepth := len(b.tagStack)
+	if cDepth < 2 {
+		b.tagStack = b.tagStack[:cDepth-1]
+		return errors.New("Variable tags can only be used within a template tag")
+	}
+	parentTag :=  b.tagStack[cDepth-2]
+	if parentTag.tagType == "variable" {
+		b.tagStack = b.tagStack[:cDepth-1]
+		return errors.New("You cannot directly nest variable tags")
+	}
+
 	closingTag = b.tagStack[cDepth-1]
 
-	b.Vars[string(closingTag.name)] = bytes.TrimSpace(closingTag.content)
+	// Add the content as an attribute variable of the parent tag
+	parentTag.attrs[string(closingTag.name)] = bytes.TrimSpace(closingTag.content)
 
 	// Drop the last tag in the tracker
 	b.tagStack = b.tagStack[:cDepth-1]
