@@ -4,36 +4,38 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
-	"path"
 )
 
 // A Manager keeps control over builds and keeps track of what files are in build
 // in addition to containing build-based configuration such as syntax patterns.
 type Manager struct {
-	WorkingDir     string
-	OutDir         string
+	WorkingDir string
+	OutDir     string
 
-	buildFiles  map[string]*BuildFile
-	glob        string
-	globDepth   int
-	tagPrefix   []byte
-	varTagOpen  []byte
-	varTagClose []byte
+	buildFiles   map[string]*BuildFile
+	glob         string
+	globDepth    int
+	tagPrefix    []byte
+	varTagPrefix []byte
+	varTagOpen   []byte
+	varTagClose  []byte
 }
 
 // NewManager creates and initializes a new Manager with a set of defaults
 func NewManager(workingDir string, outDir string) *Manager {
 	m := &Manager{
-		WorkingDir:     workingDir,
-		OutDir:         outDir,
-		buildFiles: make(map[string]*BuildFile),
-		glob:           "*.haste.html",
-		globDepth:      5,
-		tagPrefix:      []byte("t:"),
-		varTagOpen:     []byte("{{"),
-		varTagClose:    []byte("}}"),
+		WorkingDir:   workingDir,
+		OutDir:       outDir,
+		buildFiles:   make(map[string]*BuildFile),
+		glob:         "*.haste.html",
+		globDepth:    5,
+		tagPrefix:    []byte("t:"),
+		varTagPrefix: []byte("v:"),
+		varTagOpen:   []byte("{{"),
+		varTagClose:  []byte("}}"),
 	}
 	return m
 }
@@ -53,8 +55,8 @@ func (m *Manager) LoadPath(path string) error {
 	}
 
 	newBuildFiles, err := m.scanNewBuildFiles(absPath)
-	for _, path := range newBuildFiles {
-		m.addBuildFile(path)
+	for _, buildFilePath := range newBuildFiles {
+		m.addBuildFile(buildFilePath)
 	}
 
 	return err
@@ -103,7 +105,7 @@ func (m *Manager) NotifyChange(file string) []string {
 	var outPaths []string
 
 	// If a BuildFile rebuild and exit
-	match, err := filepath.Match(m.glob, path.Base(file));
+	match, err := filepath.Match(m.glob, path.Base(file))
 	if match && err == nil {
 		bf := m.addBuildFile(file)
 		outPath, err := m.BuildToFile(bf)

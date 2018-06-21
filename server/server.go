@@ -13,12 +13,12 @@ import (
 
 	"github.com/ssddanbrown/haste/engine"
 
-	"github.com/fatih/color"
+	"errors"
 	"github.com/GeertJohan/go.rice"
+	"github.com/fatih/color"
 	"github.com/howeyc/fsnotify"
 	"golang.org/x/net/websocket"
 	"net"
-	"errors"
 )
 
 type Server struct {
@@ -37,11 +37,11 @@ type Server struct {
 
 func NewServer(manager *engine.Manager, port int, livereload bool) *Server {
 	s := &Server{
-		Manager:     manager,
-		WatchedPath: manager.WorkingDir,
-		Port:        port,
-		LiveReload:  livereload,
-		WatchDepth:  5,
+		Manager:         manager,
+		WatchedPath:     manager.WorkingDir,
+		Port:            port,
+		LiveReload:      livereload,
+		WatchDepth:      5,
 		lastFileChanges: make(map[string]int64),
 	}
 
@@ -131,11 +131,11 @@ func (s *Server) handleFileChange(changedFile string) {
 	devlog("will build" + changedFile)
 
 	// Build and reload files
-	time.AfterFunc(100 * time.Millisecond, func() {
+	time.AfterFunc(100*time.Millisecond, func() {
 
 		outFiles := s.Manager.NotifyChange(changedFile)
 
-		time.AfterFunc(100 * time.Millisecond, func() {
+		time.AfterFunc(100*time.Millisecond, func() {
 			for _, file := range outFiles {
 				s.changedFiles <- file
 			}
@@ -342,7 +342,6 @@ func (s *Server) getLivereloadWsHandler() func(ws *websocket.Conn) {
 	}
 
 }
-
 
 func devlog(s string) {
 	if true {

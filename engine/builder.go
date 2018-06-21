@@ -9,10 +9,10 @@ import (
 )
 
 type Builder struct {
-	Reader  io.Reader
-	Manager *Manager
-	Vars    map[string][]byte
-	Content []byte
+	Reader      io.Reader
+	Manager     *Manager
+	Vars        map[string][]byte
+	Content     []byte
 	FilesParsed map[string]bool
 
 	tagStack []*templateTag
@@ -70,25 +70,72 @@ func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) error {
 	var err error
 	raw := tok.Raw()
 	name, hasAttr := tok.TagName()
-
-	tagPrefix := b.Manager.tagPrefix
-	prefixLen := len(tagPrefix)
-
-	isTempTag := len(name) > prefixLen && bytes.Equal(name[0:prefixLen], tagPrefix)
-
 	depth := len(b.tagStack)
 
-	// Write content if normal tag or add to content of last in stack
-	if !isTempTag {
-		if depth > 0 {
-			b.tagStack[depth-1].content = append(b.tagStack[depth-1].content, raw...)
-		} else {
-			w.Write(raw)
-		}
+	isTempTag := tagNameHasPrefix(name, b.Manager.tagPrefix)
+	if isTempTag {
+		err = b.parseTemplateTag(name, hasAttr, tok, w)
 		return err
 	}
 
-	tagName := name[prefixLen:]
+	isVarTag := tagNameHasPrefix(name, b.Manager.varTagPrefix)
+	if isVarTag {
+		// Parse var tag
+		err = b.parseVariableTag(name, tok)
+		return err
+	}
+
+	// Write content if normal tag or add to content of last in stack
+	if depth > 0 {
+		b.tagStack[depth-1].content = append(b.tagStack[depth-1].content, raw...)
+	} else {
+		w.Write(raw)
+	}
+	return err
+}
+
+func tagNameHasPrefix(tagName []byte, prefix []byte) bool {
+	prefixLen := len(prefix)
+	return len(tagName) > prefixLen && bytes.Equal(tagName[0:prefixLen], prefix)
+}
+
+func (b *Builder) parseVariableTag(name []byte, tok *html.Tokenizer) error {
+	var err error
+	tagName := name[len(b.Manager.tagPrefix):]
+	token := tok.Token()
+
+	if token.Type == html.StartTagToken || token.Type == html.SelfClosingTagToken {
+		b.addVariableTag(tagName)
+	}
+
+	if token.Type == html.EndTagToken || token.Type == html.SelfClosingTagToken {
+		err = b.closeVariableTag()
+	}
+	return err
+}
+
+func (b *Builder) addVariableTag(tagName []byte) *templateTag {
+	tag := NewVariableTag(tagName)
+	b.tagStack = append(b.tagStack, tag)
+	return tag
+}
+
+func (b *Builder) closeVariableTag() error {
+	var closingTag *templateTag
+
+	cDepth := len(b.tagStack)
+	closingTag = b.tagStack[cDepth-1]
+
+	b.Vars[string(closingTag.name)] = bytes.TrimSpace(closingTag.content)
+
+	// Drop the last tag in the tracker
+	b.tagStack = b.tagStack[:cDepth-1]
+	return nil
+}
+
+func (b *Builder) parseTemplateTag(name []byte, hasAttr bool, tok *html.Tokenizer, w io.Writer) error {
+	var err error
+	tagName := name[len(b.Manager.tagPrefix):]
 
 	// Parse tag attrs as vars
 	tagVars := make(map[string][]byte)
@@ -113,9 +160,7 @@ func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) error {
 	if token.Type == html.EndTagToken || token.Type == html.SelfClosingTagToken {
 		err = b.closeTemplateTag(w)
 	}
-
 	return err
-
 }
 
 func (b *Builder) addTemplateTag(tagName []byte, attrs map[string][]byte) *templateTag {
@@ -131,12 +176,7 @@ func (b *Builder) closeTemplateTag(writer io.Writer) (err error) {
 	var closingTag *templateTag
 
 	cDepth := len(b.tagStack)
-
-	if cDepth > 1 {
-		closingTag = b.tagStack[cDepth-1]
-	} else {
-		closingTag = b.tagStack[0]
-	}
+	closingTag = b.tagStack[cDepth-1]
 
 	content, err := closingTag.Parse(b)
 	if err != nil {
