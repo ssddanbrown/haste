@@ -107,7 +107,7 @@ func (t *templateTag) Parse(b *Builder) ([]byte, error) {
 	}
 
 	// Read content tags
-	content = bytes.Replace(content, []byte("@content"), innerContent, -1)
+	tagBuilder.Vars["content"] = innerContent
 	content = parseVariableTags(b.Manager, content, tagBuilder.Vars)
 	return content, err
 }
