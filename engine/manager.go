@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -105,7 +104,8 @@ func (m *Manager) NotifyChange(file string) []string {
 	var outPaths []string
 
 	// If a BuildFile rebuild and exit
-	match, err := filepath.Match(m.glob, path.Base(file))
+	match, err := filepath.Match(m.glob, filepath.Base(file))
+
 	if match && err == nil {
 		bf := m.addBuildFile(file)
 		outPath, err := m.BuildToFile(bf)
