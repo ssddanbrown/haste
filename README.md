@@ -10,16 +10,16 @@ The templating system uses a really simple syntax for templating out HTML via th
 Here is an example of this syntax:
 
 ```html
-<!-- index.html -->
+<!-- index.haste.html -->
 <div>
   <t:button>Click Here</t:button>
 </div>
 
 <!-- button.html -->
-<button class="btn btn-default">@content</button>
+<button class="btn btn-default">{{content}}</button>
 ```
 
-In the above example we have a custom tag in `index.html` named `<t:button>`. When built haste will look for a file named `button.html` and bring it in, Replacing the custom element. The contents of the custom tag are marked with the text `@content`. This will be replaced with the contents in the original file. The result of the above example will look like this:
+In the above example we have a custom tag in `index.html` named `<t:button>`. When built haste will look for a file named `button.html` and bring it in, Replacing the custom element. The contents of the custom tag are placed into a `content` variable which can be used via double curly braces: `{{content}}`. This will be replaced with the contents in the original file. The result of the above example will look like this:
 
 ```html
 <div>
@@ -30,14 +30,14 @@ In the above example we have a custom tag in `index.html` named `<t:button>`. Wh
 Here are some more advanced example of what you can do with the syntax:
 
 ```html
-<!-- This will look for a html file with a location of 'parts/button.html', relative to the original file -->
+<!-- This will look for a html file with a location of 'parts/button.html', relative to the build directory -->
 <t:parts.button>Click Here</t:parts.button>
 
-<!-- This will look up a directory, At the path '../button.html', relative to the orginal file -->
+<!-- This will look up a directory, At the path '../button.html', relative to the original file -->
 <t::button>Click Here</t::button>
 
 <!-- You can nest templates as much as you want -->
-<!-- Templates will always search for others relative to their own file location -->
+<!-- Templates will always search for others relative to the root build location -->
 <t:table-wrap>
   <tr>
     <td>Actions</td>
@@ -65,17 +65,17 @@ You can have simple name, value pairs of variables in your templates. These are 
 @primary=#00ACED
 <html lang="en">
 <head>
-	<title>{{{title}}}</title>
+	<title>{{title}}</title>
 </head>
-<body style="{{{bodyStyles}}}">
+<body style="{{bodyStyles}}">
 	<t:parts.header-list>
-		<span style="color:{{{primary}}}">{{{var1}}}</span>
+		<span style="color:{{primary}}">{{var1}}</span>
 	</t:parts.header-list>
 </body>
 </html>
 ```
 
-Variables must be defined on the first lines of a file with no whitespace proceeding the starting `@` symbol. It's one variable per line in the format `@name=value`. Variables can then be used via triple braces in the format `{{{name}}}`. Again, Watch any whitespace you enter in the tags as any differences to the declarations will not be forgiven.
+Variables must be defined on the first lines of a file with no whitespace proceeding the starting `@` symbol. It's one variable per line in the format `@name=value`. Variables can then be used via double curly braces in the format `{{name}}`. Again, Watch any whitespace you enter in the tags as any differences to the declarations will not be forgiven.
 
 Variables will pass down through template files but will not pass back up so parent template files will not see variables defined in child templates. Child variables inherit parent variables and will overwrite any existing if redefined.
 
@@ -85,8 +85,23 @@ Variables can be injected into child templates via the use of attributes on the 
 
 ```html
   <t:book author="Dan Brown"></t:book>
-``` 
+```
 
+#### Variable Injection via Tags
+
+Sometimes you may want to inject more than a simple string, Maybe a whole block of HTML. To do this you can used variable tags.
+These are tags which are similar to custom template tags but follow the syntax `<v:[variable-name]>`. For example, in the HTML below the `img` and `p` HTML content will be passed to the parent template as a `person` variable.
+
+```html
+<t:my-layout>
+    <v:person>
+        <img src="/images/me.png">
+        <p>My name is Dan</p>
+    </v:person>
+</t:my-layout>
+```
+
+Variable tags can only be used within custom template tags.
 
 ## Command Line Usage
 
@@ -102,33 +117,25 @@ By default the application outputs to the command line. With the `-w` flag files
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| -b   |         | Batch parse mode. Reads in multiple files and <br> outputs to the folder given as the last parameter.    |
 | -w   |         | Watch file for changes and auto-compile on change. <br> Outputs to `<filename>.gen.html`.  <br> Starts a http server for file serving and opens the browser automatically.    |
-| -l   |         | Enable livereload (When watching) |
+| -l   |         | Disable livereload (When watching) |
 | -p   | 8081    | Port to listen on (When watching) |
-| -d   | 2       | Folder depth to watch for changes (When watching) |
+| -d   | ./dist/ | Output folder for generated content |
+| -r   | ./      | Relative root folder for template references |
 | -v   |         | Show verbose output |
 
 
 #### Usage Examples
 
 ``` bash
-# Build index.html and output the result to the command line.
-./haste index.html
+# Build *.haste.html files out to a ./dist/ folder
+./haste
 
-# Build index.html save output to index.build.html
-./haste index.html > index.build.html
+# Build *.haste.html files out to a ./dist/ folder and watch for changes
+./haste -w
 
-# Watch index.html and build on change whilst also enabling livereload
-./haste -w -l index.html
-
-# As above but listen on port 80 (Instead of the 8081 default)
-# and listen to file changes up to 5 folder levels deep.
-./haste -w -l -p 80 -d 5 index.html
-
-# Build all files with the extension of .haste.html and output to
-# the folder 'dist' keeping the same folder structure as the input files.
-./haste -b **/*.haste.html dist
+# Build ./src/*.haste.html files out to the ./out/ folder.
+./haste -r src/ -d out/
 ```
 
 ## Issues and Contribution
