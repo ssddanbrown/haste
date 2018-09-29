@@ -142,6 +142,16 @@ By default the application outputs to the command line. With the `-w` flag files
 
 Haste is in its early days at the moment and I'm no golang pro so bugs are highly likely, Especially while my tests are sparse. Feel free to create an issue or create a pull request.
 
+## Testing
+
+This code can be tested by running:
+
+```bash
+go test ./...
+```
+
+As of writing, Only the core build process is tested. Other testing is in progress.
+
 ## License and Attribution
 
 [Haste is licensed under the MIT license.](https://raw.githubusercontent.com/ssddanbrown/haste/master/LICENSE)

@@ -111,3 +111,246 @@ func TestTemplateTagContentPassing(t *testing.T) {
 		t.Errorf(buildResultErrorMessage(expected, received))
 	}
 }
+
+func TestRootVariablesPassDownToChildTemplates(t *testing.T) {
+	input := strings.TrimSpace(`
+@tree=World!
+<html><body>
+<t:hello/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello! World!</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<p>Hello! {{tree}}</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestAttributesPassDownToChildTemplates(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello tree="World!"/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello! World!</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<p>Hello! {{tree}}</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestAttributesOverrideParentGlobalVars(t *testing.T) {
+	input := strings.TrimSpace(`
+@tree=Cat!
+<html><body>
+<t:hello tree="World!"/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello! World!</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<p>Hello! {{tree}}</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestBasicVariableTagUsage(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello><v:tree>World!</v:tree></t:hello>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello! World!</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<p>Hello! {{tree}}</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestVariableTagsDontPolluteParentTagTable(t *testing.T) {
+	input := strings.TrimSpace(`
+@tree=Cat
+<html><body>
+<t:hello><v:tree>World!</v:tree></t:hello>
+{{tree}}
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello! World!</p>
+Cat
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<p>Hello! {{tree}}</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestCSSTagUsage(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello.css/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<style>
+.body{background:red;}
+</style>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.css": ".body{background:red;}",
+		"hello.html": "wrong file",
+		"hello.js": "wrong file",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestJSTagUsage(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello.js/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<script>
+var a = 'hello';
+</script>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.css": "wrong file",
+		"hello.html": "wrong file",
+		"hello.js": "var a = 'hello';",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestNestedTemplateTagUsage(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello><t:hello><t:hello>beans!</t:hello></t:hello></t:hello>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<div>Hello <div>Hello <div>Hello beans!</div></div></div>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<div>Hello {{content}}</div>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestMultiCaseAttributesAreLowerCasedWhenPassed(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello aCoolCat="meow"/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<div>Hello meow</div>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<div>Hello {{acoolcat}}</div>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestMultiCaseAttributesCanByUsedWithinTemplateContent(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello aCoolCat="meow"/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<div aCoolCat="meow">Hello</div>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<div aCoolCat=\"{{acoolcat}}\">Hello</div>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
