@@ -240,7 +240,7 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 
 		htmlPath := filepath.Join(s.Manager.OutDir, r.URL.Path)
 		if filepath.Ext(htmlPath) == "" {
-			htmlPath += "/index.html"
+			htmlPath += "/base.html"
 		}
 
 		if fileExists(htmlPath) {

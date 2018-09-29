@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -40,6 +41,9 @@ func main() {
 	// Set output path
 	distPath, err := filepath.Abs(filepath.Join(wd, *distPtr))
 	check(err)
+	err = createFolderIfNotExisting(distPath)
+	fmt.Println(*distPtr)
+	check(err)
 
 	// Create a new manager
 	manager := engine.NewManager(rootPath, distPath)
@@ -63,6 +67,22 @@ func main() {
 		startWatcher(manager, *port, !*disableLiveReload)
 	}
 
+}
+
+func createFolderIfNotExisting(folderPath string) error {
+	_, err := os.Stat(folderPath)
+	if !os.IsNotExist(err) {
+		return nil
+	}
+
+	parentFolder := filepath.Dir(folderPath)
+	info, err := os.Stat(parentFolder)
+	if os.IsNotExist(err) || !info.IsDir() {
+		return errors.New(fmt.Sprintf("Cannot find directory \"%s\" or it's parent directory"))
+	}
+
+	err = os.Mkdir(folderPath, 0777)
+	return err
 }
 
 func startWatcher(m *engine.Manager, port int, livereload bool) {
