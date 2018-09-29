@@ -1,12 +1,12 @@
 package options
 
 import (
-	"errors"
 	"flag"
 	"fmt"
-	"github.com/ssddanbrown/haste/loading"
 	"os"
 	"path/filepath"
+
+	"github.com/ssddanbrown/haste/loading"
 )
 
 // Options hold all the haste specific options available
@@ -17,19 +17,19 @@ type Options struct {
 	TemplateResolver loading.TemplateResolver
 
 	// Manager Options
-	OutPath string
-	RootPath string
-	InputPaths []string
+	OutPath            string
+	RootPath           string
+	InputPaths         []string
 	BuildFileExtension string
 
 	// Build Options
-	TagPrefix []byte
+	TagPrefix    []byte
 	VarTagPrefix []byte
-	VarTagOpen []byte
-	VarTagClose []byte
+	VarTagOpen   []byte
+	VarTagClose  []byte
 
 	// Server options
-	Watch bool
+	Watch      bool
 	ServerPort int
 	LiveReload bool
 }
@@ -39,12 +39,12 @@ func NewOptions() *Options {
 	o := &Options{
 		BuildFileExtension: ".haste.html",
 
-		TagPrefix: []byte("t:"),
+		TagPrefix:    []byte("t:"),
 		VarTagPrefix: []byte("v:"),
-		VarTagOpen: []byte("{{"),
-		VarTagClose: []byte("}}"),
+		VarTagOpen:   []byte("{{"),
+		VarTagClose:  []byte("}}"),
 
-		Watch: false,
+		Watch:      false,
 		ServerPort: 8081,
 		LiveReload: true,
 	}
@@ -124,7 +124,7 @@ func createFolderIfNotExisting(folderPath string) error {
 	parentFolder := filepath.Dir(folderPath)
 	info, err := os.Stat(parentFolder)
 	if os.IsNotExist(err) || !info.IsDir() {
-		return errors.New(fmt.Sprintf("Cannot find directory \"%s\" or it's parent directory"))
+		return fmt.Errorf("Cannot find directory \"%s\" or it's parent directory", folderPath)
 	}
 
 	err = os.Mkdir(folderPath, 0777)

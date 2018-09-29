@@ -18,7 +18,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/howeyc/fsnotify"
+	"github.com/fsnotify/fsnotify"
 	"golang.org/x/net/websocket"
 )
 
@@ -101,6 +101,14 @@ func (s *Server) getLastFileChange(changedFile string) int64 {
 	return lastChange
 }
 
+func (s *Server) handleFileCreate(path string) {
+	fi, err := os.Stat(path)
+
+	if err == nil && fi.IsDir() {
+		s.AddWatchedFolder(path)
+	}
+}
+
 func (s *Server) handleFileChange(changedFile string) {
 	changedFile, err := filepath.Rel(s.Options.RootPath, changedFile)
 	changedFile = filepath.FromSlash(changedFile)
@@ -158,28 +166,32 @@ func (s *Server) startFileWatcher() error {
 
 	// Process events
 	go func() {
-
-		done := make(chan bool)
+		defer watcher.Close()
 
 		for {
 			select {
-			case ev := <-watcher.Event:
-				if ev.IsModify() {
+			case ev, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+
+				if ev.Op&fsnotify.Write == fsnotify.Write {
 					s.handleFileChange(ev.Name)
 				}
-			case err := <-watcher.Error:
+				if ev.Op&fsnotify.Create == fsnotify.Create {
+					s.handleFileCreate(ev.Name)
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
 				s.verboseLog("File Watcher Error: " + err.Error())
 			}
 		}
-
-		// Hang so program doesn't exit
-		<-done
-
-		watcher.Close()
 	}()
 
 	for i := 0; i < len(s.WatchedFolders); i++ {
-		err = watcher.Watch(s.WatchedFolders[i])
+		err = watcher.Add(s.WatchedFolders[i])
 		s.verboseLog("Adding file watcher to " + s.WatchedFolders[i])
 		check(err)
 	}
@@ -224,7 +236,7 @@ func (s *Server) watchFolder(folderPath string) error {
 		if s.fileWatcher == nil {
 			return nil
 		}
-		err := s.fileWatcher.Watch(folderPath)
+		err := s.fileWatcher.Add(folderPath)
 		s.verboseLog("Adding file watcher to " + folderPath)
 		if err != nil {
 			return err

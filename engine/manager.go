@@ -82,15 +82,11 @@ func (m *Manager) BuildAll() []string {
 }
 
 func (m *Manager) BuildToFile(b *BuildFile) (string, error) {
-	relPath, err := filepath.Rel(m.options.RootPath, b.path)
-	if err != nil {
-		return "", err
-	}
-
+	relPath := b.path
 	outPath := strings.TrimSuffix(relPath, ".haste.html") + ".html"
 	outPath = filepath.Join(m.options.OutPath, outPath)
 	outPathDir := filepath.Dir(outPath)
-	err = os.MkdirAll(outPathDir, os.ModePerm)
+	err := os.MkdirAll(outPathDir, os.ModePerm)
 	if err != nil {
 		return outPath, err
 	}
@@ -111,8 +107,6 @@ func (m *Manager) NotifyChange(file string) []string {
 	// If a BuildFile rebuild and exit
 	match, err := filepath.Match(m.glob, filepath.Base(file))
 
-	fmt.Println(match)
-
 	if match && err == nil {
 		bf := m.addBuildFile(file)
 		outPath, err := m.BuildToFile(bf)
@@ -125,10 +119,6 @@ func (m *Manager) NotifyChange(file string) []string {
 
 	// Rebuild any BuildFiles that depend on this file
 	for _, bf := range m.buildFiles {
-
-		for k := range bf.includes {
-			fmt.Println(k)
-		}
 
 		if _, ok := bf.includes[file]; ok {
 			outPath, err := m.BuildToFile(bf)

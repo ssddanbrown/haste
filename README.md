@@ -160,5 +160,5 @@ This software includes works from the following great open source projects:
 
 * [Golang](https://github.com/golang/go) - [License](https://github.com/golang/go/blob/master/LICENSE)
 * [Go Color](https://github.com/fatih/color) - [License](https://github.com/fatih/color/blob/master/LICENSE.md)
-* [Go fsnotify](https://github.com/howeyc/fsnotify) - [License](https://github.com/howeyc/fsnotify/blob/master/LICENSE)
+* [Go fsnotify](https://github.com/fsnotify/fsnotify) - [License](https://github.com/howeyc/fsnotify/blob/master/LICENSE)
 * [Livereload](https://github.com/livereload/livereload-js) - [License](https://github.com/livereload/livereload-js/blob/master/LICENSE)
