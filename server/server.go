@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ssddanbrown/haste/engine"
+	"github.com/ssddanbrown/haste/options"
 
 	"errors"
 	"github.com/GeertJohan/go.rice"
@@ -28,26 +29,24 @@ type Server struct {
 	changedFiles     chan string
 	sockets          []*websocket.Conn
 	lastFileChanges  map[string]int64
-	Port             int
 	WatchedPath      string
 	WatchedRootFiles []string
-	LiveReload       bool
 	WatchDepth       int
+	Options          *options.Options
 }
 
-func NewServer(manager *engine.Manager, port int, livereload bool) *Server {
+func NewServer(manager *engine.Manager, opts *options.Options) *Server {
 	s := &Server{
 		Manager:         manager,
-		WatchedPath:     manager.WorkingDir,
-		Port:            port,
-		LiveReload:      livereload,
+		WatchedPath:     opts.RootPath,
 		WatchDepth:      5,
 		lastFileChanges: make(map[string]int64),
+		Options: opts,
 	}
 
-	portFree := checkPortFree(s.Port)
+	portFree := checkPortFree(opts.ServerPort)
 	if !portFree {
-		check(errors.New(fmt.Sprintf("Listen port %d not available, Are you already running haste?\n", s.Port)))
+		check(errors.New(fmt.Sprintf("Listen port %d not available, Are you already running haste?\n", opts.ServerPort)))
 		return s
 	}
 
@@ -68,7 +67,7 @@ func (s *Server) AddWatchedFolder(folder string) {
 func (s *Server) Listen() error {
 	s.startFileWatcher()
 	handler := s.getManagerRouting()
-	http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", s.Port), handler)
+	http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", s.Options.ServerPort), handler)
 	return nil
 }
 
@@ -233,12 +232,12 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 	handler := http.NewServeMux()
 	customServeMux := http.NewServeMux()
 
-	customServeMux.Handle("/", http.FileServer(http.Dir(s.Manager.OutDir)))
+	customServeMux.Handle("/", http.FileServer(http.Dir(s.Options.OutPath)))
 
 	// Get our generated HTML file
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 
-		htmlPath := filepath.Join(s.Manager.OutDir, r.URL.Path)
+		htmlPath := filepath.Join(s.Options.OutPath, r.URL.Path)
 		if filepath.Ext(htmlPath) == "" {
 			htmlPath += "/index.html"
 		}
@@ -249,7 +248,7 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 			w.Header().Add("Cache-Control", "no-cache")
 			w.Header().Add("Content-Type", "text/html")
 			io.Copy(w, file)
-			if s.LiveReload {
+			if s.Options.LiveReload {
 				fmt.Fprintln(w, "\n<script src=\"/livereload.js\"></script>")
 			}
 		} else {
@@ -259,7 +258,7 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 
 	})
 
-	if !s.LiveReload {
+	if !s.Options.LiveReload {
 		return handler
 	}
 
@@ -274,7 +273,7 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 		if err != nil {
 			check(err)
 		}
-		templS.Execute(w, s.Port)
+		templS.Execute(w, s.Options.ServerPort)
 	})
 
 	// Websocket handling

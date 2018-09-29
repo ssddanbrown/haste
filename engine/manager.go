@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"github.com/ssddanbrown/haste/options"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,37 +12,41 @@ import (
 // A Manager keeps control over builds and keeps track of what files are in build
 // in addition to containing build-based configuration such as syntax patterns.
 type Manager struct {
-	WorkingDir string
-	OutDir     string
+	options *options.Options
 
 	buildFiles   map[string]*BuildFile
 	glob         string
 	globDepth    int
-	tagPrefix    []byte
-	varTagPrefix []byte
-	varTagOpen   []byte
-	varTagClose  []byte
 }
 
 // NewManager creates and initializes a new Manager with a set of defaults
-func NewManager(workingDir string, outDir string) *Manager {
+func NewManager(options *options.Options) *Manager {
 	m := &Manager{
-		WorkingDir:   workingDir,
-		OutDir:       outDir,
+		options: options,
 		buildFiles:   make(map[string]*BuildFile),
-		glob:         "*.haste.html",
+		glob:         "*" + options.BuildFileExtension,
 		globDepth:    5,
-		tagPrefix:    []byte("t:"),
-		varTagPrefix: []byte("v:"),
-		varTagOpen:   []byte("{{"),
-		varTagClose:  []byte("}}"),
 	}
+
+	if options.InputPaths != nil {
+		m.loadPaths(options.InputPaths)
+	}
+
 	return m
 }
 
-// LoadPath of a file or directory into the manager
-// Recursively searches for matching build files if a directory given.
-func (m *Manager) LoadPath(path string) error {
+func (m *Manager) loadPaths(paths []string) error {
+	for _, path := range paths {
+		err := m.loadPath(path)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+
+func (m *Manager) loadPath(path string) error {
 	absPath, err := filepath.Abs(path)
 	fileStat, err := os.Stat(absPath)
 	if err != nil {
@@ -77,13 +82,13 @@ func (m *Manager) BuildAll() []string {
 }
 
 func (m *Manager) BuildToFile(b *BuildFile) (string, error) {
-	relPath, err := filepath.Rel(m.WorkingDir, b.path)
+	relPath, err := filepath.Rel(m.options.RootPath, b.path)
 	if err != nil {
 		return "", err
 	}
 
 	outPath := strings.TrimSuffix(relPath, ".haste.html") + ".html"
-	outPath = filepath.Join(m.OutDir, outPath)
+	outPath = filepath.Join(m.options.OutPath, outPath)
 	outPathDir := filepath.Dir(outPath)
 	err = os.MkdirAll(outPathDir, os.ModePerm)
 	if err != nil {

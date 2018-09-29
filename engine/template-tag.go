@@ -64,7 +64,7 @@ func checkFileExists(filePath string) bool {
 
 func (t *templateTag) findFile(manager *Manager) (string, error) {
 	strName := string(t.name)
-	htmlPath := t.nameToPath(".html", manager.WorkingDir)
+	htmlPath := t.nameToPath(".html", manager.options.RootPath)
 	likelyLocations := []string{htmlPath}
 	if checkFileExists(htmlPath) {
 		t.contentType = "html"
@@ -75,7 +75,7 @@ func (t *templateTag) findFile(manager *Manager) (string, error) {
 	for i := range altTypes {
 		ext := "." + altTypes[i]
 		if strings.HasSuffix(strName, ext) {
-			filePath := t.nameToPath(ext, manager.WorkingDir)
+			filePath := t.nameToPath(ext, manager.options.RootPath)
 			likelyLocations = append(likelyLocations, filePath)
 			if checkFileExists(filePath) {
 				t.contentType = altTypes[i]
@@ -130,9 +130,9 @@ func parseVariableTags(manager *Manager, content []byte, vars map[string][]byte)
 	var newContent []byte
 
 	escChar := byte('@')
-	startTag := manager.varTagOpen
+	startTag := manager.options.VarTagOpen
 	startTagLen := len(startTag)
-	endTag := manager.varTagClose
+	endTag := manager.options.VarTagClose
 	endTagLen := len(endTag)
 
 	contentLen := len(content)

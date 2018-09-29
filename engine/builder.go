@@ -5,9 +5,9 @@ import (
 	"bytes"
 	"io"
 
-	"golang.org/x/net/html"
 	"errors"
 	"github.com/fatih/color"
+	"golang.org/x/net/html"
 )
 
 type Builder struct {
@@ -77,13 +77,13 @@ func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) error {
 	name, hasAttr := tok.TagName()
 	depth := len(b.tagStack)
 
-	isTempTag := tagNameHasPrefix(name, b.Manager.tagPrefix)
+	isTempTag := tagNameHasPrefix(name, b.Manager.options.TagPrefix)
 	if isTempTag {
 		err = b.parseTemplateTag(name, hasAttr, tok, w)
 		return err
 	}
 
-	isVarTag := tagNameHasPrefix(name, b.Manager.varTagPrefix)
+	isVarTag := tagNameHasPrefix(name, b.Manager.options.VarTagPrefix)
 	if isVarTag {
 		// Parse var tag
 		err = b.parseVariableTag(name, tok)
@@ -106,7 +106,7 @@ func tagNameHasPrefix(tagName []byte, prefix []byte) bool {
 
 func (b *Builder) parseVariableTag(name []byte, tok *html.Tokenizer) error {
 	var err error
-	tagName := name[len(b.Manager.tagPrefix):]
+	tagName := name[len(b.Manager.options.TagPrefix):]
 	token := tok.Token()
 
 	if token.Type == html.StartTagToken || token.Type == html.SelfClosingTagToken {
@@ -151,7 +151,7 @@ func (b *Builder) closeVariableTag() error {
 
 func (b *Builder) parseTemplateTag(name []byte, hasAttr bool, tok *html.Tokenizer, w io.Writer) error {
 	var err error
-	tagName := name[len(b.Manager.tagPrefix):]
+	tagName := name[len(b.Manager.options.TagPrefix):]
 
 	// Parse tag attrs as vars
 	tagVars := make(map[string][]byte)
