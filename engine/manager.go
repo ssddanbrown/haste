@@ -2,11 +2,12 @@ package engine
 
 import (
 	"fmt"
-	"github.com/ssddanbrown/haste/options"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ssddanbrown/haste/options"
 )
 
 // A Manager keeps control over builds and keeps track of what files are in build
@@ -14,18 +15,18 @@ import (
 type Manager struct {
 	options *options.Options
 
-	buildFiles   map[string]*BuildFile
-	glob         string
-	globDepth    int
+	buildFiles map[string]*BuildFile
+	glob       string
+	globDepth  int
 }
 
 // NewManager creates and initializes a new Manager with a set of defaults
 func NewManager(options *options.Options) *Manager {
 	m := &Manager{
-		options: options,
-		buildFiles:   make(map[string]*BuildFile),
-		glob:         "*" + options.BuildFileExtension,
-		globDepth:    5,
+		options:    options,
+		buildFiles: make(map[string]*BuildFile),
+		glob:       "*" + options.BuildFileExtension,
+		globDepth:  5,
 	}
 
 	if options.InputPaths != nil {
@@ -44,7 +45,6 @@ func (m *Manager) loadPaths(paths []string) error {
 	}
 	return nil
 }
-
 
 func (m *Manager) loadPath(path string) error {
 	absPath, err := filepath.Abs(path)
@@ -111,6 +111,8 @@ func (m *Manager) NotifyChange(file string) []string {
 	// If a BuildFile rebuild and exit
 	match, err := filepath.Match(m.glob, filepath.Base(file))
 
+	fmt.Println(match)
+
 	if match && err == nil {
 		bf := m.addBuildFile(file)
 		outPath, err := m.BuildToFile(bf)
@@ -123,6 +125,11 @@ func (m *Manager) NotifyChange(file string) []string {
 
 	// Rebuild any BuildFiles that depend on this file
 	for _, bf := range m.buildFiles {
+
+		for k := range bf.includes {
+			fmt.Println(k)
+		}
+
 		if _, ok := bf.includes[file]; ok {
 			outPath, err := m.BuildToFile(bf)
 			outPaths = append(outPaths, outPath)
@@ -137,7 +144,7 @@ func (m *Manager) NotifyChange(file string) []string {
 func (m *Manager) Build(buildFile *BuildFile) (io.Reader, error) {
 	fmt.Println("Building:", buildFile.path)
 	file, err := os.Open(buildFile.path)
-	builder := NewBuilder(file, m.options,nil)
+	builder := NewBuilder(file, m.options, nil)
 	bReader := builder.Build()
 	buildFile.includes = builder.FilesParsed
 	return bReader, err

@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"github.com/fatih/color"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -11,13 +10,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
+
 	"github.com/ssddanbrown/haste/engine"
 	"github.com/ssddanbrown/haste/options"
 
 	"errors"
+	"net"
+
 	"github.com/howeyc/fsnotify"
 	"golang.org/x/net/websocket"
-	"net"
 )
 
 type Server struct {
@@ -39,7 +41,7 @@ func NewServer(manager *engine.Manager, opts *options.Options) *Server {
 		WatchedPath:     opts.RootPath,
 		WatchDepth:      5,
 		lastFileChanges: make(map[string]int64),
-		Options: opts,
+		Options:         opts,
 	}
 
 	portFree := checkPortFree(opts.ServerPort)
@@ -100,6 +102,9 @@ func (s *Server) getLastFileChange(changedFile string) int64 {
 }
 
 func (s *Server) handleFileChange(changedFile string) {
+	changedFile, err := filepath.Rel(s.Options.RootPath, changedFile)
+	changedFile = filepath.FromSlash(changedFile)
+	check(err)
 
 	// Prevent duplicate changes
 	currentTime := time.Now().UnixNano()
@@ -131,11 +136,11 @@ func (s *Server) handleFileChange(changedFile string) {
 	s.verboseLog(fmt.Sprintf("Change occurred in %s", changedFile))
 
 	// Build and reload files
-	time.AfterFunc(50 * time.Millisecond, func() {
+	time.AfterFunc(50*time.Millisecond, func() {
 
 		outFiles := s.Manager.NotifyChange(changedFile)
 
-		time.AfterFunc(50 * time.Millisecond, func() {
+		time.AfterFunc(50*time.Millisecond, func() {
 			for _, file := range outFiles {
 				s.changedFiles <- file
 			}

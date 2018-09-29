@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/ssddanbrown/haste/options"
 	"io"
 	"io/ioutil"
+	"path/filepath"
 	"strings"
+
+	"github.com/ssddanbrown/haste/options"
 )
 
 type templateTag struct {
@@ -47,7 +49,8 @@ func (t *templateTag) nameToPath(ext string) string {
 	strName := string(t.name)
 	strName = strings.TrimSuffix(strName, ext)
 	p := strings.Replace(strName, ".", "/", -1)
-	return strings.Replace(p, ":", "../", -1) + ext
+	p = strings.Replace(p, ":", "../", -1) + ext
+	return filepath.FromSlash(p)
 }
 
 func (t *templateTag) getReader() (io.Reader, error) {
