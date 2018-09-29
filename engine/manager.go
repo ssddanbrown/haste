@@ -137,7 +137,7 @@ func (m *Manager) NotifyChange(file string) []string {
 func (m *Manager) Build(buildFile *BuildFile) (io.Reader, error) {
 	fmt.Println("Building:", buildFile.path)
 	file, err := os.Open(buildFile.path)
-	builder := NewBuilder(file, m, nil)
+	builder := NewBuilder(file, m.options,nil)
 	bReader := builder.Build()
 	buildFile.includes = builder.FilesParsed
 	return bReader, err

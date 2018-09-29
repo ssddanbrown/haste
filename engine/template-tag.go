@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/ssddanbrown/haste/options"
 	"io"
 	"io/ioutil"
 	"os"
@@ -12,6 +13,7 @@ import (
 )
 
 type templateTag struct {
+	options     *options.Options
 	name        []byte
 	content     []byte
 	contentType string
@@ -21,20 +23,22 @@ type templateTag struct {
 	varContent  map[string][]byte
 }
 
-func NewVariableTag(name []byte) *templateTag {
+func NewVariableTag(name []byte, opts *options.Options) *templateTag {
 	tag := &templateTag{
 		name:    make([]byte, len(name)),
 		tagType: "variable",
+		options: opts,
 	}
 	copy(tag.name, name)
 	return tag
 }
 
-func NewTemplateTag(name []byte, attrs map[string][]byte) *templateTag {
+func NewTemplateTag(name []byte, attrs map[string][]byte, opts *options.Options) *templateTag {
 	tag := &templateTag{
 		name:    make([]byte, len(name)),
 		attrs:   attrs,
 		tagType: "template",
+		options: opts,
 	}
 	copy(tag.name, name)
 	return tag
@@ -48,8 +52,8 @@ func (t *templateTag) nameToPath(ext, root string) string {
 	return filepath.Join(root, p)
 }
 
-func (t *templateTag) getReader(manager *Manager) (io.Reader, error) {
-	tagPath, err := t.findFile(manager)
+func (t *templateTag) getReader() (io.Reader, error) {
+	tagPath, err := t.findFile()
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +66,9 @@ func checkFileExists(filePath string) bool {
 	return !os.IsNotExist(err)
 }
 
-func (t *templateTag) findFile(manager *Manager) (string, error) {
+func (t *templateTag) findFile() (string, error) {
 	strName := string(t.name)
-	htmlPath := t.nameToPath(".html", manager.options.RootPath)
+	htmlPath := t.nameToPath(".html", t.options.RootPath)
 	likelyLocations := []string{htmlPath}
 	if checkFileExists(htmlPath) {
 		t.contentType = "html"
@@ -75,7 +79,7 @@ func (t *templateTag) findFile(manager *Manager) (string, error) {
 	for i := range altTypes {
 		ext := "." + altTypes[i]
 		if strings.HasSuffix(strName, ext) {
-			filePath := t.nameToPath(ext, manager.options.RootPath)
+			filePath := t.nameToPath(ext, t.options.RootPath)
 			likelyLocations = append(likelyLocations, filePath)
 			if checkFileExists(filePath) {
 				t.contentType = altTypes[i]
@@ -89,19 +93,19 @@ func (t *templateTag) findFile(manager *Manager) (string, error) {
 }
 
 func (t *templateTag) Parse(b *Builder) ([]byte, error) {
-	tagReader, err := t.getReader(b.Manager)
+	tagReader, err := t.getReader()
 	if err != nil {
 		return nil, err
 	}
 
 	// Generate content
-	tagBuilder := NewBuilder(tagReader, b.Manager, b)
+	tagBuilder := NewBuilder(tagReader, b.Options, b)
 	contentReader := tagBuilder.Build()
 
 	// Clean and parse inner content before merging tags
 	// Prevents attr vars leaking into scope of the content
 	innerContent := bytes.Trim(t.content, "\n\r ")
-	innerContent = parseVariableTags(b.Manager, innerContent, tagBuilder.Vars)
+	innerContent = parseVariableTags(b.Options, innerContent, tagBuilder.Vars)
 
 	tagBuilder.mergeVars(t.attrs)
 
@@ -118,11 +122,11 @@ func (t *templateTag) Parse(b *Builder) ([]byte, error) {
 
 	// Read content tags
 	tagBuilder.Vars["content"] = innerContent
-	content = parseVariableTags(b.Manager, content, tagBuilder.Vars)
+	content = parseVariableTags(b.Options, content, tagBuilder.Vars)
 	return content, err
 }
 
-func parseVariableTags(manager *Manager, content []byte, vars map[string][]byte) []byte {
+func parseVariableTags(opts *options.Options, content []byte, vars map[string][]byte) []byte {
 	inTag := false
 	tagStart := 0
 	tagEnd := -1
@@ -130,14 +134,14 @@ func parseVariableTags(manager *Manager, content []byte, vars map[string][]byte)
 	var newContent []byte
 
 	escChar := byte('@')
-	startTag := manager.options.VarTagOpen
+	startTag := opts.VarTagOpen
 	startTagLen := len(startTag)
-	endTag := manager.options.VarTagClose
+	endTag := opts.VarTagClose
 	endTagLen := len(endTag)
 
 	contentLen := len(content)
 
-	// TOOD - Refactor to be piping?
+	// TODO - Refactor to be piping?
 
 	for i := range content {
 		if contentLen >= i+startTagLen && bytes.Equal(content[i:i+startTagLen], startTag) && (i == 0 || content[i-1] != escChar) {

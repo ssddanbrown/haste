@@ -3,6 +3,7 @@ package engine
 import (
 	"bufio"
 	"bytes"
+	"github.com/ssddanbrown/haste/options"
 	"io"
 
 	"errors"
@@ -12,7 +13,7 @@ import (
 
 type Builder struct {
 	Reader      io.Reader
-	Manager     *Manager
+	Options     *options.Options
 	Vars        map[string][]byte
 	Content     []byte
 	FilesParsed map[string]bool
@@ -20,10 +21,10 @@ type Builder struct {
 	tagStack []*templateTag
 }
 
-func NewBuilder(r io.Reader, m *Manager, parent *Builder) *Builder {
+func NewBuilder(r io.Reader, o *options.Options, parent *Builder) *Builder {
 	b := &Builder{
-		Manager: m,
 		Reader:  r,
+		Options: o,
 	}
 
 	// Create var store and copy over parent vars
@@ -77,13 +78,13 @@ func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) error {
 	name, hasAttr := tok.TagName()
 	depth := len(b.tagStack)
 
-	isTempTag := tagNameHasPrefix(name, b.Manager.options.TagPrefix)
+	isTempTag := tagNameHasPrefix(name, b.Options.TagPrefix)
 	if isTempTag {
 		err = b.parseTemplateTag(name, hasAttr, tok, w)
 		return err
 	}
 
-	isVarTag := tagNameHasPrefix(name, b.Manager.options.VarTagPrefix)
+	isVarTag := tagNameHasPrefix(name, b.Options.VarTagPrefix)
 	if isVarTag {
 		// Parse var tag
 		err = b.parseVariableTag(name, tok)
@@ -106,7 +107,7 @@ func tagNameHasPrefix(tagName []byte, prefix []byte) bool {
 
 func (b *Builder) parseVariableTag(name []byte, tok *html.Tokenizer) error {
 	var err error
-	tagName := name[len(b.Manager.options.TagPrefix):]
+	tagName := name[len(b.Options.TagPrefix):]
 	token := tok.Token()
 
 	if token.Type == html.StartTagToken || token.Type == html.SelfClosingTagToken {
@@ -120,7 +121,7 @@ func (b *Builder) parseVariableTag(name []byte, tok *html.Tokenizer) error {
 }
 
 func (b *Builder) addVariableTag(tagName []byte) *templateTag {
-	tag := NewVariableTag(tagName)
+	tag := NewVariableTag(tagName, b.Options)
 	b.tagStack = append(b.tagStack, tag)
 	return tag
 }
@@ -133,7 +134,7 @@ func (b *Builder) closeVariableTag() error {
 		b.tagStack = b.tagStack[:cDepth-1]
 		return errors.New("Variable tags can only be used within a template tag")
 	}
-	parentTag :=  b.tagStack[cDepth-2]
+	parentTag := b.tagStack[cDepth-2]
 	if parentTag.tagType == "variable" {
 		b.tagStack = b.tagStack[:cDepth-1]
 		return errors.New("You cannot directly nest variable tags")
@@ -151,7 +152,7 @@ func (b *Builder) closeVariableTag() error {
 
 func (b *Builder) parseTemplateTag(name []byte, hasAttr bool, tok *html.Tokenizer, w io.Writer) error {
 	var err error
-	tagName := name[len(b.Manager.options.TagPrefix):]
+	tagName := name[len(b.Options.TagPrefix):]
 
 	// Parse tag attrs as vars
 	tagVars := make(map[string][]byte)
@@ -180,7 +181,7 @@ func (b *Builder) parseTemplateTag(name []byte, hasAttr bool, tok *html.Tokenize
 }
 
 func (b *Builder) addTemplateTag(tagName []byte, attrs map[string][]byte) *templateTag {
-	tag := NewTemplateTag(tagName, attrs)
+	tag := NewTemplateTag(tagName, attrs, b.Options)
 	b.tagStack = append(b.tagStack, tag)
 	return tag
 }
