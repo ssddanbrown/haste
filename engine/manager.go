@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/ssddanbrown/haste/options"
 )
@@ -48,19 +49,23 @@ func (m *Manager) loadPaths(paths []string) error {
 
 func (m *Manager) loadPath(path string) error {
 	absPath, err := filepath.Abs(path)
+	relPath, err := filepath.Rel(m.options.RootPath, path)
 	fileStat, err := os.Stat(absPath)
 	if err != nil {
 		return err
 	}
 
 	if !fileStat.IsDir() {
-		m.addBuildFile(absPath)
+		m.addBuildFile(relPath)
 		return err
 	}
 
 	newBuildFiles, err := m.scanNewBuildFiles(absPath)
 	for _, buildFilePath := range newBuildFiles {
-		m.addBuildFile(buildFilePath)
+		buildRelPath, err := filepath.Rel(m.options.RootPath, buildFilePath)
+		if err == nil {
+			m.addBuildFile(buildRelPath)
+		}
 	}
 
 	return err
@@ -69,21 +74,27 @@ func (m *Manager) loadPath(path string) error {
 func (m *Manager) BuildAll() []string {
 
 	var outPaths []string
+	var wg sync.WaitGroup
 
 	for _, bf := range m.buildFiles {
-		outPath, err := m.BuildToFile(bf)
-		outPaths = append(outPaths, outPath)
-		if err != nil {
-			fmt.Println(err)
-		}
+		wg.Add(1)
+		go func(bf *BuildFile) {
+			defer wg.Done()
+			outPath, err := m.BuildToFile(bf)
+			outPaths = append(outPaths, outPath)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}(bf)
 	}
 
+	wg.Wait()
 	return outPaths
 }
 
 func (m *Manager) BuildToFile(b *BuildFile) (string, error) {
 	relPath := b.path
-	outPath := strings.TrimSuffix(relPath, ".haste.html") + ".html"
+	outPath := strings.TrimSuffix(relPath, m.options.BuildFileExtension) + ".html"
 	outPath = filepath.Join(m.options.OutPath, outPath)
 	outPathDir := filepath.Dir(outPath)
 	err := os.MkdirAll(outPathDir, os.ModePerm)
