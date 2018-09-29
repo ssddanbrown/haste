@@ -227,7 +227,9 @@ func (b *Builder) parseTemplateVariables(r io.Reader) io.Reader {
 	for scanner.Scan() {
 		text = scanner.Bytes()
 
-		if text[0] == varChar && len(text) > 1 {
+		// Read as variable if starting with variable symbol and content exists
+		// Otherwise stop reading variables
+		if len(text) > 0 && text[0] == varChar && len(text) > 1 {
 			splitVar := bytes.SplitN(text[1:], varSep, 2)
 			if len(splitVar) != 2 {
 				continue
