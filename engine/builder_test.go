@@ -65,3 +65,49 @@ hellotree
 		t.Errorf(buildResultErrorMessage(expected, received))
 	}
 }
+
+func TestBasicTemplateTagUsage(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello/><t:hello/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello</p><p>Hello</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<p>Hello</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestTemplateTagContentPassing(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello>This is some content</t:hello>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello! This is some content</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<p>Hello! {{content}}</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}

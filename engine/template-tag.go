@@ -12,14 +12,14 @@ import (
 )
 
 type templateTag struct {
-	options     *options.Options
-	name        []byte
-	content     []byte
-	contentType string
-	tagType     string
-	path        string
-	attrs       map[string][]byte
-	varContent  map[string][]byte
+	options         *options.Options
+	name            []byte
+	injectedContent []byte
+	contentType     string
+	tagType         string
+	path            string
+	attrs           map[string][]byte
+	varContent      map[string][]byte
 }
 
 func NewVariableTag(name []byte, opts *options.Options) *templateTag {
@@ -73,40 +73,39 @@ func (t *templateTag) getReader() (io.Reader, error) {
 	return nil, errors.New(errMsg)
 }
 
-func (t *templateTag) Parse(b *Builder) ([]byte, error) {
+func (t *templateTag) Parse(parentBuilder *Builder) ([]byte, error) {
 	tagReader, err := t.getReader()
 	if err != nil {
 		return nil, err
 	}
 
-	// Generate content
-	tagBuilder := NewBuilder(tagReader, b.Options, b)
-	contentReader := tagBuilder.Build()
+	// Generate injectedContent
+	tagBuilder := NewBuilder(tagReader, parentBuilder.Options, parentBuilder)
 
-	// Clean and parse inner content before merging tags
-	// Prevents attr vars leaking into scope of the content
-	innerContent := bytes.Trim(t.content, "\n\r ")
-	innerContentReader := parseVariableTags(bytes.NewReader(innerContent), tagBuilder.Vars, b.Options)
-	innerContent, err = ioutil.ReadAll(innerContentReader)
+	// Clean and parse inner injectedContent before merging tags
+	// Prevents attr vars leaking into scope of the injectedContent
+	injectedContent := bytes.Trim(t.injectedContent, "\n\r ")
+	injectedContentReader := parseVariableTags(bytes.NewReader(injectedContent), tagBuilder.Vars, parentBuilder.Options)
+	injectedContent, err = ioutil.ReadAll(injectedContentReader)
 
 	tagBuilder.mergeVars(t.attrs)
+	tagBuilder.Vars["content"] = injectedContent
 
-	// Read content and wrap if style or script
+	// Finished rendered result of this tag's contents
+	tagSourceContentReader := tagBuilder.Build()
+
+	// Read injectedContent and wrap if style or script
 	// TODO - Refactor to stream? If possible here
-	content, err := ioutil.ReadAll(contentReader)
+	tagSourceContent, err := ioutil.ReadAll(tagSourceContentReader)
 	if t.contentType == "css" {
-		content = append([]byte("<style>\n"), content...)
-		content = append(content, []byte("\n</style>")...)
+		tagSourceContent = append([]byte("<style>\n"), tagSourceContent...)
+		tagSourceContent = append(tagSourceContent, []byte("\n</style>")...)
 	} else if t.contentType == "js" {
-		content = append([]byte("<script>\n"), content...)
-		content = append(content, []byte("\n</script>")...)
+		tagSourceContent = append([]byte("<script>\n"), tagSourceContent...)
+		tagSourceContent = append(tagSourceContent, []byte("\n</script>")...)
 	}
 
-	// Read content tags
-	tagBuilder.Vars["content"] = innerContent
-	contentReader = parseVariableTags(bytes.NewReader(content), tagBuilder.Vars, b.Options)
-	content, err = ioutil.ReadAll(contentReader)
-	return content, err
+	return tagSourceContent, err
 }
 
 func parseVariableTags(r io.Reader, vars map[string][]byte, opts *options.Options) io.Reader {
@@ -123,8 +122,6 @@ func parseVariableTags(r io.Reader, vars map[string][]byte, opts *options.Option
 		startTagLen := len(startTag)
 		endTag := opts.VarTagClose
 		endTagLen := len(endTag)
-
-
 
 		var line []byte
 		for scanner.Scan() {
@@ -162,7 +159,7 @@ func parseVariableTags(r io.Reader, vars map[string][]byte, opts *options.Option
 					w.Write(line[tagStart:i])
 				} else if !inTag && tagEnd < i {
 					// No tag
-					w.Write(line[i:i+1])
+					w.Write(line[i : i+1])
 				}
 			}
 

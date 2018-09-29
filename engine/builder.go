@@ -48,7 +48,7 @@ func (b *Builder) mergeVars(vars map[string][]byte) {
 func (b *Builder) Build() io.Reader {
 	r := b.parseTemplateVariables(b.Reader)
 	r = b.parseTemplateTags(r)
-	//r = parseVariableTags(r, b.Vars, b.Options)
+	r = parseVariableTags(r, b.Vars, b.Options)
 	return r
 }
 
@@ -92,9 +92,9 @@ func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) error {
 		return err
 	}
 
-	// Write content if normal tag or add to content of last in stack
+	// Write injectedContent if normal tag or add to injectedContent of last in stack
 	if depth > 0 {
-		b.tagStack[depth-1].content = append(b.tagStack[depth-1].content, raw...)
+		b.tagStack[depth-1].injectedContent = append(b.tagStack[depth-1].injectedContent, raw...)
 	} else {
 		w.Write(raw)
 	}
@@ -143,8 +143,8 @@ func (b *Builder) closeVariableTag() error {
 
 	closingTag = b.tagStack[cDepth-1]
 
-	// Add the content as an attribute variable of the parent tag
-	parentTag.attrs[string(closingTag.name)] = bytes.TrimSpace(closingTag.content)
+	// Add the injectedContent as an attribute variable of the parent tag
+	parentTag.attrs[string(closingTag.name)] = bytes.TrimSpace(closingTag.injectedContent)
 
 	// Drop the last tag in the tracker
 	b.tagStack = b.tagStack[:cDepth-1]
@@ -187,9 +187,9 @@ func (b *Builder) addTemplateTag(tagName []byte, attrs map[string][]byte) *templ
 	return tag
 }
 
-// Closes the last template tag off and parses the content
+// Closes the last template tag off and parses the injectedContent
 // into the next latest template tag or, if not mor tags exist,
-// adds the tag content to the output
+// adds the tag injectedContent to the output
 func (b *Builder) closeTemplateTag(writer io.Writer) (err error) {
 	var closingTag *templateTag
 
@@ -207,7 +207,7 @@ func (b *Builder) closeTemplateTag(writer io.Writer) (err error) {
 
 	if cDepth > 1 {
 		prevTag := b.tagStack[cDepth-2]
-		prevTag.content = append(prevTag.content, content...)
+		prevTag.injectedContent = append(prevTag.injectedContent, content...)
 	} else {
 		writer.Write(content)
 	}
@@ -229,7 +229,7 @@ func (b *Builder) parseTemplateVariables(r io.Reader) io.Reader {
 	for scanner.Scan() {
 		text = scanner.Bytes()
 
-		// Read as variable if starting with variable symbol and content exists
+		// Read as variable if starting with variable symbol and injectedContent exists
 		// Otherwise stop reading variables
 		if len(text) > 0 && text[0] == varChar && len(text) > 1 {
 			splitVar := bytes.SplitN(text[1:], varSep, 2)
@@ -243,7 +243,7 @@ func (b *Builder) parseTemplateVariables(r io.Reader) io.Reader {
 
 	}
 
-	// Send the remaining content back via reader
+	// Send the remaining injectedContent back via reader
 	go func() {
 		defer w.Close()
 
