@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/ssddanbrown/haste/loading"
 	"os"
 	"path/filepath"
 )
@@ -11,6 +12,9 @@ import (
 // Options hold all the haste specific options available
 type Options struct {
 	Verbose bool
+
+	// Internal Services
+	TemplateResolver loading.TemplateResolver
 
 	// Manager Options
 	OutPath string
@@ -45,6 +49,11 @@ func NewOptions() *Options {
 		LiveReload: true,
 	}
 	return o
+}
+
+func (o *Options) LoadFileResolver() {
+	templateResolver := loading.NewFileTemplateResolver(o.RootPath)
+	o.TemplateResolver = templateResolver
 }
 
 // ParseCommandFlags to read user-provided input from the command-line

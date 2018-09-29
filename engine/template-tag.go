@@ -7,8 +7,6 @@ import (
 	"github.com/ssddanbrown/haste/options"
 	"io"
 	"io/ioutil"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -44,52 +42,34 @@ func NewTemplateTag(name []byte, attrs map[string][]byte, opts *options.Options)
 	return tag
 }
 
-func (t *templateTag) nameToPath(ext, root string) string {
+func (t *templateTag) nameToPath(ext string) string {
 	strName := string(t.name)
 	strName = strings.TrimSuffix(strName, ext)
 	p := strings.Replace(strName, ".", "/", -1)
-	p = strings.Replace(p, ":", "../", -1) + ext
-	return filepath.Join(root, p)
+	return strings.Replace(p, ":", "../", -1) + ext
 }
 
 func (t *templateTag) getReader() (io.Reader, error) {
-	tagPath, err := t.findFile()
-	if err != nil {
-		return nil, err
-	}
-	t.path = tagPath
-	return os.Open(tagPath)
-}
-
-func checkFileExists(filePath string) bool {
-	_, err := os.Stat(filePath)
-	return !os.IsNotExist(err)
-}
-
-func (t *templateTag) findFile() (string, error) {
 	strName := string(t.name)
-	htmlPath := t.nameToPath(".html", t.options.RootPath)
-	likelyLocations := []string{htmlPath}
-	if checkFileExists(htmlPath) {
-		t.contentType = "html"
-		return htmlPath, nil
-	}
+	var likelyLocations []string
 
-	altTypes := []string{"css", "js"}
-	for i := range altTypes {
-		ext := "." + altTypes[i]
-		if strings.HasSuffix(strName, ext) {
-			filePath := t.nameToPath(ext, t.options.RootPath)
+	extTypes := []string{"css", "js", "html"}
+	for _, baseExt := range extTypes {
+		ext := "." + baseExt
+		if baseExt == "html" || strings.HasSuffix(strName, ext) {
+			filePath := t.nameToPath(ext)
 			likelyLocations = append(likelyLocations, filePath)
-			if checkFileExists(filePath) {
-				t.contentType = altTypes[i]
-				return filePath, nil
+			reader, err := t.options.TemplateResolver.GetTemplateReader(filePath)
+			if err == nil {
+				t.contentType = baseExt
+				t.path = filePath
+				return reader, err
 			}
 		}
 	}
 
 	errMsg := fmt.Sprintf("Could not find tag with name \"%s\" at of the following locations:\n%s", t.name, strings.Join(likelyLocations, "\n"))
-	return "", errors.New(errMsg)
+	return nil, errors.New(errMsg)
 }
 
 func (t *templateTag) Parse(b *Builder) ([]byte, error) {

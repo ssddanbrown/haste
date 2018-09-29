@@ -16,6 +16,7 @@ func main() {
 	// Get options and parse command line options
 	opts := options.NewOptions()
 	err := opts.ParseCommandFlags()
+	opts.LoadFileResolver()
 	check(err)
 
 	// Create a new manager
