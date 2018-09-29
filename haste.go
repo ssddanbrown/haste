@@ -42,7 +42,6 @@ func main() {
 	distPath, err := filepath.Abs(filepath.Join(wd, *distPtr))
 	check(err)
 	err = createFolderIfNotExisting(distPath)
-	fmt.Println(*distPtr)
 	check(err)
 
 	// Create a new manager
