@@ -48,6 +48,7 @@ func (b *Builder) mergeVars(vars map[string][]byte) {
 func (b *Builder) Build() io.Reader {
 	r := b.parseTemplateVariables(b.Reader)
 	r = b.parseTemplateTags(r)
+	//r = parseVariableTags(r, b.Vars, b.Options)
 	return r
 }
 

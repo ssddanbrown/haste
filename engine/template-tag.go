@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -85,7 +86,8 @@ func (t *templateTag) Parse(b *Builder) ([]byte, error) {
 	// Clean and parse inner content before merging tags
 	// Prevents attr vars leaking into scope of the content
 	innerContent := bytes.Trim(t.content, "\n\r ")
-	innerContent = parseVariableTags(b.Options, innerContent, tagBuilder.Vars)
+	innerContentReader := parseVariableTags(bytes.NewReader(innerContent), tagBuilder.Vars, b.Options)
+	innerContent, err = ioutil.ReadAll(innerContentReader)
 
 	tagBuilder.mergeVars(t.attrs)
 
@@ -102,56 +104,75 @@ func (t *templateTag) Parse(b *Builder) ([]byte, error) {
 
 	// Read content tags
 	tagBuilder.Vars["content"] = innerContent
-	content = parseVariableTags(b.Options, content, tagBuilder.Vars)
+	contentReader = parseVariableTags(bytes.NewReader(content), tagBuilder.Vars, b.Options)
+	content, err = ioutil.ReadAll(contentReader)
 	return content, err
 }
 
-func parseVariableTags(opts *options.Options, content []byte, vars map[string][]byte) []byte {
-	inTag := false
-	tagStart := 0
-	tagEnd := -1
+func parseVariableTags(r io.Reader, vars map[string][]byte, opts *options.Options) io.Reader {
 
-	var newContent []byte
+	returnReader, w := io.Pipe()
 
-	escChar := byte('@')
-	startTag := opts.VarTagOpen
-	startTagLen := len(startTag)
-	endTag := opts.VarTagClose
-	endTagLen := len(endTag)
+	scanner := bufio.NewScanner(r)
+	go func() {
 
-	contentLen := len(content)
+		defer w.Close()
 
-	// TODO - Refactor to be piping?
+		escChar := byte('@')
+		startTag := opts.VarTagOpen
+		startTagLen := len(startTag)
+		endTag := opts.VarTagClose
+		endTagLen := len(endTag)
 
-	for i := range content {
-		if contentLen >= i+startTagLen && bytes.Equal(content[i:i+startTagLen], startTag) && (i == 0 || content[i-1] != escChar) {
-			// Start tag
-			if inTag {
-				// Update new contents if that tag start is reset
-				newContent = append(newContent, content[tagStart:i]...)
+
+
+		var line []byte
+		for scanner.Scan() {
+
+			// Restore newlines that scanner will remove
+			if line != nil {
+				w.Write([]byte("\n"))
 			}
-			tagStart = i
-			inTag = true
-		} else if inTag && contentLen >= endTagLen && bytes.Equal(content[i:i+endTagLen], endTag) && (i == 0 || content[i-1] != escChar) {
-			// End tag
-			inTag = false
-			tagKey := string(content[tagStart+startTagLen : i])
-			newContent = append(newContent, vars[tagKey]...)
-			tagEnd = i + endTagLen - 1
-		} else if inTag && i-tagStart > 100 {
-			// Tag name tracking cutoff
-			inTag = false
-			newContent = append(newContent, content[tagStart:i]...)
-		} else if !inTag && tagEnd < i {
-			// No tag
-			newContent = append(newContent, content[i])
+
+			inTag := false
+			tagStart := 0
+			tagEnd := -1
+
+			line = scanner.Bytes()
+			contentLen := len(line)
+			for i := range line {
+				if contentLen >= i+startTagLen && bytes.Equal(line[i:i+startTagLen], startTag) && (i == 0 || line[i-1] != escChar) {
+					// Start tag
+					if inTag {
+						// Update new contents if that tag start is reset
+						w.Write(line[tagStart:i])
+					}
+					tagStart = i
+					inTag = true
+				} else if inTag && contentLen >= endTagLen && bytes.Equal(line[i:i+endTagLen], endTag) && (i == 0 || line[i-1] != escChar) {
+					// End tag
+					inTag = false
+					tagKey := string(line[tagStart+startTagLen : i])
+					w.Write(vars[tagKey])
+					tagEnd = i + endTagLen - 1
+				} else if inTag && i-tagStart > 100 {
+					// Tag name tracking cutoff
+					inTag = false
+					tagEnd = -1
+					w.Write(line[tagStart:i])
+				} else if !inTag && tagEnd < i {
+					// No tag
+					w.Write(line[i:i+1])
+				}
+			}
+
+			// Add any remaining line if a new tag was being tracked
+			if inTag {
+				w.Write(line[tagStart:])
+			}
 		}
-	}
 
-	// Add any remaining content if a new tag was being tracked
-	if inTag {
-		newContent = append(newContent, content[tagStart:]...)
-	}
+	}()
 
-	return newContent
+	return returnReader
 }

@@ -265,8 +265,9 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 
 	// Get LiveReload Script
 	handler.HandleFunc("/livereload.js", func(w http.ResponseWriter, r *http.Request) {
+		livereload := strings.Replace(livereloadjs, "PORT_NUMBER", fmt.Sprintf("%d", s.Options.ServerPort), 1)
 		w.Header().Set("Content-Type", "application/javascript")
-		w.Write([]byte(livereloadjs))
+		w.Write([]byte(livereload))
 	})
 
 	// Websocket handling
