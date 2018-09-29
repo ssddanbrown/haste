@@ -2,21 +2,19 @@ package server
 
 import (
 	"fmt"
+	"github.com/fatih/color"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/ssddanbrown/haste/engine"
 	"github.com/ssddanbrown/haste/options"
 
 	"errors"
-	"github.com/GeertJohan/go.rice"
-	"github.com/fatih/color"
 	"github.com/howeyc/fsnotify"
 	"golang.org/x/net/websocket"
 	"net"
@@ -53,12 +51,17 @@ func NewServer(manager *engine.Manager, opts *options.Options) *Server {
 	return s
 }
 
+func (s *Server) verboseLog(str string) {
+	if s.Options.Verbose {
+		color.Blue(str)
+	}
+}
+
 func (s *Server) watchingFolder() bool {
 	return filepath.Ext(s.WatchedPath) == ""
 }
 
 func (s *Server) AddWatchedFolder(folder string) {
-	devlog("AddWatchedFolder:" + folder)
 	err := s.watchFoldersToDepth(folder, s.WatchDepth)
 	check(err)
 	go s.handleFileChange(folder)
@@ -86,8 +89,6 @@ func (s *Server) liveReloadAlertChange(file string) {
 			websocket.JSON.Send(s.sockets[i], response)
 		}
 	}
-
-	devlog("File changed: " + file)
 }
 
 func (s *Server) getLastFileChange(changedFile string) int64 {
@@ -127,14 +128,14 @@ func (s *Server) handleFileChange(changedFile string) {
 		return
 	}
 
-	devlog("will build" + changedFile)
+	s.verboseLog(fmt.Sprintf("Change occurred in %s", changedFile))
 
 	// Build and reload files
-	time.AfterFunc(100*time.Millisecond, func() {
+	time.AfterFunc(50 * time.Millisecond, func() {
 
 		outFiles := s.Manager.NotifyChange(changedFile)
 
-		time.AfterFunc(100*time.Millisecond, func() {
+		time.AfterFunc(50 * time.Millisecond, func() {
 			for _, file := range outFiles {
 				s.changedFiles <- file
 			}
@@ -162,7 +163,7 @@ func (s *Server) startFileWatcher() error {
 					s.handleFileChange(ev.Name)
 				}
 			case err := <-watcher.Error:
-				devlog("File Watcher Error: " + err.Error())
+				s.verboseLog("File Watcher Error: " + err.Error())
 			}
 		}
 
@@ -174,7 +175,7 @@ func (s *Server) startFileWatcher() error {
 
 	for i := 0; i < len(s.WatchedFolders); i++ {
 		err = watcher.Watch(s.WatchedFolders[i])
-		devlog("Adding file watcher to " + s.WatchedFolders[i])
+		s.verboseLog("Adding file watcher to " + s.WatchedFolders[i])
 		check(err)
 	}
 
@@ -219,7 +220,7 @@ func (s *Server) watchFolder(folderPath string) error {
 			return nil
 		}
 		err := s.fileWatcher.Watch(folderPath)
-		devlog("Adding file watcher to " + folderPath)
+		s.verboseLog("Adding file watcher to " + folderPath)
 		if err != nil {
 			return err
 		}
@@ -262,18 +263,10 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 		return handler
 	}
 
-	// Load compiled in static content
-	fileBox := rice.MustFindBox("res")
-
 	// Get LiveReload Script
 	handler.HandleFunc("/livereload.js", func(w http.ResponseWriter, r *http.Request) {
-		http.FileServer(fileBox.HTTPBox())
-		scriptString := fileBox.MustString("livereload.js")
-		templS, err := template.New("livereload").Parse(scriptString)
-		if err != nil {
-			check(err)
-		}
-		templS.Execute(w, s.Options.ServerPort)
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Write([]byte(livereloadjs))
 	})
 
 	// Websocket handling
@@ -286,66 +279,6 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 func fileExists(file string) bool {
 	_, err := os.Stat(file)
 	return !os.IsNotExist(err)
-}
-
-type livereloadResponse struct {
-	Command string `json:"command"`
-}
-
-type livereloadHello struct {
-	Command    string   `json:"command"`
-	Protocols  []string `json:"protocols"`
-	ServerName string   `json:"serverName"`
-}
-
-type livereloadChange struct {
-	Command string `json:"command"`
-	Path    string `json:"path"`
-	LiveCSS bool   `json:"liveCSS"`
-}
-
-func (s *Server) getLivereloadWsHandler() func(ws *websocket.Conn) {
-	return func(ws *websocket.Conn) {
-
-		s.sockets = append(s.sockets, ws)
-
-		for {
-			// websocket.Message.Send(ws, "Hello, Client!")
-			wsData := new(livereloadResponse)
-			err := websocket.JSON.Receive(ws, &wsData)
-			if err != nil && err != io.EOF {
-				check(err)
-				return
-			} else if err == io.EOF {
-				return
-			}
-
-			if wsData.Command == "hello" {
-				response := livereloadHello{
-					Command: "hello",
-					Protocols: []string{
-						"http://livereload.com/protocols/connection-check-1",
-						"http://livereload.com/protocols/official-7",
-						"http://livereload.com/protocols/official-8",
-						"http://livereload.com/protocols/official-9",
-						"http://livereload.com/protocols/2.x-origin-version-negotiation",
-					},
-					ServerName: "Webby",
-				}
-				devlog("Sending livereload hello")
-				websocket.JSON.Send(ws, response)
-			}
-
-		}
-
-	}
-
-}
-
-func devlog(s string) {
-	if true {
-		color.Blue(s)
-	}
 }
 
 func check(err error) {
