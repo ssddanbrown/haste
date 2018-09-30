@@ -60,3 +60,30 @@ nav a {
     border-radius: 12px;
     padding: 12px 32px;
 }
+
+.counter {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    grid-template-areas:
+            "a a"
+            "b c";
+}
+
+.counter h4 {
+    grid-area: a;
+    margin: .3rem 0
+}
+
+.counter div {
+    grid-area: b;
+}
+
+.counter p {
+    margin: 0;
+    grid-area: c;
+    font-size: 0.8rem;
+}
+
+.counter p, .counter div {
+    padding: 16px;
+}

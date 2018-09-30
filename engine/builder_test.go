@@ -183,6 +183,29 @@ func TestAttributesOverrideParentGlobalVars(t *testing.T) {
 	}
 }
 
+func TestAttributesOverrideChildGlobalVars(t *testing.T) {
+	input := strings.TrimSpace(`
+<html><body>
+<t:hello tree="World!"/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello! World!</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "@tree=Cat!\n<p>Hello! {{tree}}</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
 func TestBasicVariableTagUsage(t *testing.T) {
 	input := strings.TrimSpace(`
 <html><body>

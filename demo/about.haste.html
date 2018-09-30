@@ -7,8 +7,28 @@
         how you can "compose" templates together in an extending manner.
     </p>
 
+    <hr>
+
+    <p>
+        Below you can find three counters. Each of these are the same included file
+        but they are provided variables differently to set the starting count value.
+
+        <br><br>
+
+        The first takes it's value from the template-level variable defined at the top
+        of the file. <br>
+        The second is provided a starting point via an attribute. <br>
+        The third is provided a starting point using a variable tag.
+        <br><br>
+
+        This shows how attributes will override template-level variables.
+    </p>
+
     <t:parts.counter/>
     <t:parts.counter start_at="1000"/>
+    <t:parts.counter>
+        <v:start_at>5000</v:start_at>
+    </t:parts.counter>
 
     <v:sidebar>
         <h4>Sidebar</h4>

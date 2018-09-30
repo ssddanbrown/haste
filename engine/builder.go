@@ -236,7 +236,10 @@ func (b *Builder) parseTemplateVariables(r io.Reader) io.Reader {
 			if len(splitVar) != 2 {
 				continue
 			}
-			b.Vars[string(splitVar[0])] = splitVar[1]
+			key := string(splitVar[0])
+			if _, exists := b.Vars[key]; !exists {
+				b.Vars[key] = splitVar[1]
+			}
 		} else {
 			break
 		}
