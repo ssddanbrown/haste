@@ -1,0 +1,18 @@
+body {
+    background: #F8F8F8;
+    font-family: sans-serif;
+    margin: 0;
+    padding: 16px;
+}
+
+
+.button {
+    display: inline-block;
+    border: 2px solid #BBB;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 16px;
+    color: #888;
+    padding: 8px 12px;
+    text-decoration: none;
+}

@@ -1,3 +1,7 @@
 builds/
 *.html
 rice-box.go
+.idea/
+demo/dist/
+
+!demo/**/*.html
