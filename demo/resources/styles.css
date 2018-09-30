@@ -2,7 +2,32 @@ body {
     background: #F8F8F8;
     font-family: sans-serif;
     margin: 0;
-    padding: 16px;
+    padding: 0;
+}
+
+header {
+    background: #0F2027;  /* fallback for old browsers */
+    background: linear-gradient(to right, #2C5364, #203A43, #0F2027);
+    padding: 12px 32px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+nav {
+    text-align: right;
+}
+
+nav a {
+    display: inline-block;
+    padding: 6px 12px;
+    text-decoration: none;
+    color: #FFF;
+}
+
+.logo {
+    color: #FFF;
+    font-size: 1.2rem;
+    padding: 2px 0;
 }
 
 
@@ -15,4 +40,23 @@ body {
     color: #888;
     padding: 8px 12px;
     text-decoration: none;
+}
+
+.container {
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 32px;
+}
+
+.sidebar-layout {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    grid-column-gap: 32px;
+}
+
+.sidebar {
+    background-color: #DDD;
+    border-radius: 12px;
+    padding: 12px 32px;
 }

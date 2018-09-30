@@ -1,12 +1,31 @@
-
-<t:layouts.base>
+<t:layouts.sidebar>
 
     <h1>About this demo!</h1>
 
     <p>
-        Lorem ipsum dolor sit amet, consectetur adipisicing elit. Adipisci aspernatur, incidunt minus qui quis voluptas? Cum deleniti hic maiores maxime nisi quo rem rerum sed. Aliquam amet asperiores corporis dignissimos doloremque exercitationem hic illum labore nihil odit pariatur, placeat qui quod. Accusamus amet dignissimos dolore doloribus eius enim, error eveniet harum in, ipsum laborum minima molestias nisi nulla obcaecati perferendis placeat porro reiciendis temporibus voluptatibus? Accusamus aspernatur consectetur cum, doloremque dolores enim et eveniet ex excepturi exercitationem in ipsum iusto magnam nisi omnis placeat porro quae quidem reiciendis sequi sunt temporibus totam vero! Debitis impedit laboriosam mollitia porro provident, quia.
+        The page uses a sidebar template layout which itself includes the base layout showing
+        how you can "compose" templates together in an extending manner.
     </p>
 
-    <t:parts.button href="/">Back home</t:parts.button>
+    <t:parts.counter/>
+    <t:parts.counter start_at="1000"/>
 
-</t:layouts.base>
+    <v:sidebar>
+        <h4>Sidebar</h4>
+        <p>
+            This is sidebar content injected in through a variable tag.
+        </p>
+        <p>
+            Even though this content is within the main parsed content it
+            is not included within the content output but instead parsed into
+            a variable.
+        </p>
+
+        <p>
+            Variable tags can only be used within a custom template tag.
+        </p>
+
+        <t:parts.button href="/">Back Home</t:parts.button>
+    </v:sidebar>
+
+</t:layouts.sidebar>

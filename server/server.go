@@ -180,6 +180,7 @@ func (s *Server) startFileWatcher() error {
 				}
 				if ev.Op&fsnotify.Create == fsnotify.Create {
 					s.handleFileCreate(ev.Name)
+					s.handleFileChange(ev.Name)
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
@@ -280,9 +281,10 @@ func (s *Server) getManagerRouting() *http.ServeMux {
 		return handler
 	}
 
+	livereload := strings.Replace(livereloadjs, "PORT_NUMBER", fmt.Sprintf("%d", s.Options.ServerPort), 1)
+
 	// Get LiveReload Script
 	handler.HandleFunc("/livereload.js", func(w http.ResponseWriter, r *http.Request) {
-		livereload := strings.Replace(livereloadjs, "PORT_NUMBER", fmt.Sprintf("%d", s.Options.ServerPort), 1)
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write([]byte(livereload))
 	})

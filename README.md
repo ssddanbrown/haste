@@ -12,14 +12,14 @@ Here is an example of this syntax:
 ```html
 <!-- index.haste.html -->
 <div>
-  <t:button>Click Here</t:button>
+  <t:parts.button>Click Here</t:parts.button>
 </div>
 
-<!-- button.html -->
+<!-- parts/button.html -->
 <button class="btn btn-default">{{content}}</button>
 ```
 
-In the above example we have a custom tag in `index.html` named `<t:button>`. When built haste will look for a file named `button.html` and bring it in, Replacing the custom element. The contents of the custom tag are placed into a `content` variable which can be used via double curly braces: `{{content}}`. This will be replaced with the contents in the original file. The result of the above example will look like this:
+In the above example we have a custom tag in `index.html` named `<t:parts.button>`. When built haste will look for a file named `button.html` in a `parts` directory and bring it in, Replacing the custom element. The contents of the custom tag are placed into a `content` variable which can be used via double curly braces: `{{content}}`. This will be replaced with the contents in the original file. The result of the above example will look like this:
 
 ```html
 <div>
@@ -32,9 +32,6 @@ Here are some more advanced example of what you can do with the syntax:
 ```html
 <!-- This will look for a html file with a location of 'parts/button.html', relative to the build directory -->
 <t:parts.button>Click Here</t:parts.button>
-
-<!-- This will look up a directory, At the path '../button.html', relative to the original file -->
-<t::button>Click Here</t::button>
 
 <!-- You can nest templates as much as you want -->
 <!-- Templates will always search for others relative to the root build location -->
@@ -86,6 +83,8 @@ Variables can be injected into child templates via the use of attributes on the 
 ```html
   <t:book author="Dan Brown"></t:book>
 ```
+
+Due to HTML standards, Attributes used on template tags will have their names lower-cased when made into variables.
 
 #### Variable Injection via Tags
 

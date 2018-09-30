@@ -1,11 +1,32 @@
+@custom_variable_text=This is some custom variable content
+@custom_variable_text_color=orange
 <t:layouts.base>
 
     <h1>Welcome to the homepage!</h1>
 
     <p>
-        Lorem ipsum dolor sit amet, consectetur adipisicing elit. Adipisci aspernatur, incidunt minus qui quis voluptas? Cum deleniti hic maiores maxime nisi quo rem rerum sed. Aliquam amet asperiores corporis dignissimos doloremque exercitationem hic illum labore nihil odit pariatur, placeat qui quod. Accusamus amet dignissimos dolore doloribus eius enim, error eveniet harum in, ipsum laborum minima molestias nisi nulla obcaecati perferendis placeat porro reiciendis temporibus voluptatibus? Accusamus aspernatur consectetur cum, doloremque dolores enim et eveniet ex excepturi exercitationem in ipsum iusto magnam nisi omnis placeat porro quae quidem reiciendis sequi sunt temporibus totam vero! Debitis impedit laboriosam mollitia porro provident, quia.
+        This page uses a 'base' template found in <code>layouts/base.html</code>.
+        The CSS for this demo site is maintained in a separate file but is auto-injected into the output
+        by haste within <code>&lt;style&gt;</code> tags.
+        <br><br>
+        The below buttons are a component found in <code>parts/buttons.html</code> and show
+        how content and attributes on custom elements can be passed in to child template files.
     </p>
 
     <t:parts.button href="/about.html">About this demo</t:parts.button>
+    <t:parts.button href="https://example.com">Example.com</t:parts.button>
+
+    <p>
+        Check out <code>about.haste.html</code> for a more advanced example of using variables and templates.
+    </p>
+
+    <h3>Variables</h3>
+
+    <p>
+        This is an example of using variables, which are defined at the top of this file:
+        <br><br>
+        <span style="color: {{custom_variable_text_color}}">{{custom_variable_text}}</span>
+    </p>
+
 
 </t:layouts.base>
