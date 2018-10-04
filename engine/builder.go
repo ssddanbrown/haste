@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"github.com/ssddanbrown/haste/options"
 	"io"
+	"io/ioutil"
 
 	"errors"
 	"github.com/fatih/color"
@@ -103,7 +104,7 @@ func (b *Builder) parseToken(tok *html.Tokenizer, w io.Writer) error {
 
 func tagNameHasPrefix(tagName []byte, prefix []byte) bool {
 	prefixLen := len(prefix)
-	return len(tagName) > prefixLen && bytes.Equal(tagName[0:prefixLen], prefix)
+	return len(tagName) > prefixLen-1  && bytes.Equal(tagName[0:prefixLen], prefix)
 }
 
 func (b *Builder) parseVariableTag(name []byte, tok *html.Tokenizer) error {
@@ -162,11 +163,19 @@ func (b *Builder) parseTemplateTag(name []byte, hasAttr bool, tok *html.Tokenize
 			key, val, hasMore := tok.TagAttr()
 			valCopy := make([]byte, len(val))
 			copy(valCopy, val)
+			tagValReader := parseVariableTags(bytes.NewReader(valCopy), b.Vars, b.Options)
+			valCopy, err = ioutil.ReadAll(tagValReader)
 			tagVars[string(key)] = valCopy
 			if !hasMore {
 				break
 			}
 		}
+	}
+
+	pathAttr, ok := tagVars[":name"]
+	if len(tagName) == 0 && ok {
+		tagNameReader := parseVariableTags(bytes.NewReader(pathAttr), b.Vars, b.Options)
+		tagName, err = ioutil.ReadAll(tagNameReader)
 	}
 
 	token := tok.Token()

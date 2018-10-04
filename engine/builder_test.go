@@ -159,6 +159,30 @@ func TestAttributesPassDownToChildTemplates(t *testing.T) {
 	}
 }
 
+func TestAttributesCanContainVariables(t *testing.T) {
+	input := strings.TrimSpace(`
+@text=World!
+<html><body>
+<t:hello tree="{{text}}"/>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello! World!</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hello.html": "<p>Hello! {{tree}}</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
 func TestAttributesOverrideParentGlobalVars(t *testing.T) {
 	input := strings.TrimSpace(`
 @tree=Cat!
@@ -370,6 +394,80 @@ func TestMultiCaseAttributesCanByUsedWithinTemplateContent(t *testing.T) {
 
 	resolveMap := map[string]string {
 		"hello.html": "<div aCoolCat=\"{{acoolcat}}\">Hello</div>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestTemplatesCanBeIncludedDynamically(t *testing.T) {
+	input := strings.TrimSpace(`
+@template=hello
+<html><body>
+<t: :name="parts.{{template}}">there</t:>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<div>Hello there</div>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"parts/hello.html": "<div>Hello {{content}}</div>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestDynamicTemplateIncludesCanUseAttributeVariables(t *testing.T) {
+	input := strings.TrimSpace(`
+@template=hello
+<html><body>
+<t:parts.hello component="goodbye">there</t:parts.hello>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<div>Hello but <div>Goodbye there</div></div>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"parts/hello.html": "<div>Hello but <t: :name=\"parts.{{component}}\">{{content}}</t:></div>",
+		"parts/goodbye.html": "<div>Goodbye {{content}}</div>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestDynamicTemplateIncludesCanUseDynamicAttributeVariables(t *testing.T) {
+	input := strings.TrimSpace(`
+@template=goodbye
+<html><body>
+<t:parts.hello component="{{template}}">there</t:parts.hello>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<div>Hello but <div>Goodbye there</div></div>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"parts/hello.html": "<div>Hello but <t: :name=\"parts.{{component}}\">{{content}}</t:></div>",
+		"parts/goodbye.html": "<div>Goodbye {{content}}</div>",
 	}
 
 	received := simpleBuild(t, input, resolveMap)

@@ -51,6 +51,13 @@ Here are some more advanced example of what you can do with the syntax:
 
 ```
 
+The name for a template tag can be alternatively set via a special `:name` attribute on the tag. This can make use of variable. For Example, the below would look to include a `parts.button.html` file.
+
+```html
+@component=button
+<t: :name="parts.{{component}}"/> 
+```
+
 ### Variables
 
 You can have simple name, value pairs of variables in your templates. These are defined and used in the following format:
