@@ -22,6 +22,7 @@ type templateTag struct {
 	path            string
 	attrs           map[string][]byte
 	varContent      map[string][]byte
+	topLevel        bool
 }
 
 func NewVariableTag(name []byte, opts *options.Options) *templateTag {
@@ -34,13 +35,15 @@ func NewVariableTag(name []byte, opts *options.Options) *templateTag {
 	return tag
 }
 
-func NewTemplateTag(name []byte, attrs map[string][]byte, opts *options.Options) *templateTag {
+func NewTemplateTag(name []byte, attrs map[string][]byte, opts *options.Options, isTopLevel bool) *templateTag {
 	tag := &templateTag{
-		name:    make([]byte, len(name)),
-		attrs:   attrs,
-		tagType: "template",
-		options: opts,
+		name:     make([]byte, len(name)),
+		attrs:    attrs,
+		tagType:  "template",
+		options:  opts,
+		topLevel: isTopLevel,
 	}
+
 	copy(tag.name, name)
 	return tag
 }
@@ -88,7 +91,7 @@ func (t *templateTag) Parse(parentBuilder *Builder) ([]byte, error) {
 	// Clean and parse inner injectedContent before merging tags
 	// Prevents attr vars leaking into scope of the injectedContent
 	injectedContent := bytes.Trim(t.injectedContent, "\n\r ")
-	injectedContentReader := parseVariableTags(bytes.NewReader(injectedContent), tagBuilder.Vars, parentBuilder.Options)
+	injectedContentReader := parseVariableTags(bytes.NewReader(injectedContent), tagBuilder.Vars, parentBuilder.Options, false)
 	injectedContent, err = ioutil.ReadAll(injectedContentReader)
 
 	tagBuilder.mergeVars(t.attrs)
@@ -111,7 +114,7 @@ func (t *templateTag) Parse(parentBuilder *Builder) ([]byte, error) {
 	return tagSourceContent, err
 }
 
-func parseVariableTags(r io.Reader, vars map[string][]byte, opts *options.Options) io.Reader {
+func parseVariableTags(r io.Reader, vars map[string][]byte, opts *options.Options, isTopLevel bool) io.Reader {
 
 	returnReader, w := io.Pipe()
 
@@ -125,6 +128,11 @@ func parseVariableTags(r io.Reader, vars map[string][]byte, opts *options.Option
 		startTagLen := len(startTag)
 		endTag := opts.VarTagClose
 		endTagLen := len(endTag)
+		escapedTagStart := bytes.Join([][]byte{
+			{escChar},
+			startTag,
+		}, []byte(""))
+		escapedTagStartLen := len(escapedTagStart)
 
 		var line []byte
 		for scanner.Scan() {
@@ -141,7 +149,8 @@ func parseVariableTags(r io.Reader, vars map[string][]byte, opts *options.Option
 			line = scanner.Bytes()
 			contentLen := len(line)
 			for i := range line {
-				if contentLen >= i+startTagLen && bytes.Equal(line[i:i+startTagLen], startTag) && (i == 0 || line[i-1] != escChar) {
+				atTagStart := contentLen >= i+startTagLen && bytes.Equal(line[i:i+startTagLen], startTag)
+				if  atTagStart && (i == 0 || line[i-1] != escChar) {
 					// Start tag
 					if inTag {
 						// Update new contents if that tag start is reset
@@ -160,6 +169,9 @@ func parseVariableTags(r io.Reader, vars map[string][]byte, opts *options.Option
 					inTag = false
 					tagEnd = -1
 					w.Write(line[tagStart:i])
+				} else if isTopLevel && contentLen >= i+escapedTagStartLen && bytes.Equal(line[i:i+escapedTagStartLen], escapedTagStart) {
+					// Start of escaped tag
+					// Simply does not write out the escape char if top level
 				} else if !inTag && tagEnd < i {
 					// No tag
 					w.Write(line[i : i+1])

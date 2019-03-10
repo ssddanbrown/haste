@@ -475,3 +475,50 @@ func TestDynamicTemplateIncludesCanUseDynamicAttributeVariables(t *testing.T) {
 		t.Errorf(buildResultErrorMessage(expected, received))
 	}
 }
+
+func TestVariableSyntaxCanBeEscaped(t *testing.T) {
+	input := strings.TrimSpace(`
+@template=hello
+<html><body>
+<p>@{{template}}</p>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>{{template}}</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {}
+	received := simpleBuild(t, input, resolveMap)
+
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}
+
+func TestVariableSyntaxCanBeEscapedInChildTemplates(t *testing.T) {
+	input := strings.TrimSpace(`
+@tree=World!
+<html><body>
+<t:hi>@{{tree}}</t:hi>
+</body></html>
+`)
+
+	expected := strings.TrimSpace(`
+<html><body>
+<p>Hello! {{tree}}</p>
+</body></html>
+`)
+
+	resolveMap := map[string]string {
+		"hi.html": "<t:hello>{{content}}</t:hello>",
+		"hello.html": "<p>Hello! {{content}}</p>",
+	}
+
+	received := simpleBuild(t, input, resolveMap)
+	if received != expected {
+		t.Errorf(buildResultErrorMessage(expected, received))
+	}
+}

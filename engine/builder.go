@@ -18,6 +18,7 @@ type Builder struct {
 	Vars        map[string][]byte
 	Content     []byte
 	FilesParsed map[string]bool
+	HasParent   bool
 
 	tagStack []*templateTag
 }
@@ -26,6 +27,7 @@ func NewBuilder(r io.Reader, o *options.Options, parent *Builder) *Builder {
 	b := &Builder{
 		Reader:  r,
 		Options: o,
+		HasParent: parent != nil,
 	}
 
 	// Create var store and copy over parent vars
@@ -49,7 +51,7 @@ func (b *Builder) mergeVars(vars map[string][]byte) {
 func (b *Builder) Build() io.Reader {
 	r := b.parseTemplateVariables(b.Reader)
 	r = b.parseTemplateTags(r)
-	r = parseVariableTags(r, b.Vars, b.Options)
+	r = parseVariableTags(r, b.Vars, b.Options, !b.HasParent)
 	return r
 }
 
@@ -163,7 +165,7 @@ func (b *Builder) parseTemplateTag(name []byte, hasAttr bool, tok *html.Tokenize
 			key, val, hasMore := tok.TagAttr()
 			valCopy := make([]byte, len(val))
 			copy(valCopy, val)
-			tagValReader := parseVariableTags(bytes.NewReader(valCopy), b.Vars, b.Options)
+			tagValReader := parseVariableTags(bytes.NewReader(valCopy), b.Vars, b.Options, !b.HasParent)
 			valCopy, err = ioutil.ReadAll(tagValReader)
 			tagVars[string(key)] = valCopy
 			if !hasMore {
@@ -174,7 +176,7 @@ func (b *Builder) parseTemplateTag(name []byte, hasAttr bool, tok *html.Tokenize
 
 	pathAttr, ok := tagVars[":name"]
 	if len(tagName) == 0 && ok {
-		tagNameReader := parseVariableTags(bytes.NewReader(pathAttr), b.Vars, b.Options)
+		tagNameReader := parseVariableTags(bytes.NewReader(pathAttr), b.Vars, b.Options, !b.HasParent)
 		tagName, err = ioutil.ReadAll(tagNameReader)
 	}
 
@@ -191,7 +193,7 @@ func (b *Builder) parseTemplateTag(name []byte, hasAttr bool, tok *html.Tokenize
 }
 
 func (b *Builder) addTemplateTag(tagName []byte, attrs map[string][]byte) *templateTag {
-	tag := NewTemplateTag(tagName, attrs, b.Options)
+	tag := NewTemplateTag(tagName, attrs, b.Options, !b.HasParent)
 	b.tagStack = append(b.tagStack, tag)
 	return tag
 }

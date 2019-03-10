@@ -83,6 +83,8 @@ Variables must be defined on the first lines of a file with no whitespace procee
 
 Variables will pass down through template files but will not pass back up so parent template files will not see variables defined in child templates. Child variables inherit parent variables and will overwrite any existing if redefined.
 
+Variables can be escaped using an `@`. For example, `@{{name}}` will output as `{{name}}`.
+
 #### Variable Injection via Attributes
 
 Variables can be injected into child templates via the use of attributes on the template tag. For example, in the HTML below the variable named `author` will be available as a variable to the child template `book` with a value of `Dan Brown`.
